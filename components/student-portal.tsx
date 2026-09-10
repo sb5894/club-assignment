@@ -87,7 +87,7 @@ export function StudentPortal({ initialState }: { initialState: StudentState | n
   }
 
   return <div className="app student-portal">
-    <header className="topbar"><div className="brand"><span className="brand-mark"><LayoutGrid size={23}/></span><span>우리 동아리<small>학생 신청 · 내 신청 확인</small></span></div>{state && <Button variant="outline" disabled={busy} onClick={signOut}><LogOut size={16}/>로그아웃</Button>}</header>
+    <header className="topbar"><div className="brand"><span className="brand-mark"><LayoutGrid size={23}/></span><span>안성초 5~6 동아리 신청<small>학생 신청 · 내 신청 확인</small></span></div>{state && <Button variant="outline" disabled={busy} onClick={signOut}><LogOut size={16}/>로그아웃</Button>}</header>
     <main className={state ? 'student-workspace' : 'portal-login'}>
       {error && <p className="form-error" role="alert">{error}</p>}
       {notice && <output className="notice">{notice}</output>}
