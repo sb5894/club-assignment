@@ -1,6 +1,6 @@
-export type Club = { id: string; name: string; category: string; min: number; max: number };
+export type Club = { id: string; name: string; category: string; min: number; max: number; allocationMode?: 'lottery' | 'fixed'; fixedStudentIds?: string[] };
 export type Student = { id: string; grade: number; classNo: number; number: number; name: string; gender: string; choices: string[] };
-export type Placement = { club: string | null; rank: number | null; reason?: string };
+export type Placement = { club: string | null; rank: number | null; reason?: string; assignmentType?: 'fixed' | 'manual' };
 export type Round = { rank: number; club: string; candidates: string[]; winners: string[]; seats: number };
 export type Result = { seed: string; placements: Record<string, Placement>; rounds: Round[] };
 export const CLUBS: Club[] = [
@@ -15,12 +15,13 @@ function random(seed: string) {
   for (const c of seed) a = Math.imul(a ^ c.charCodeAt(0), 16777619);
   return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
 }
-export function demoStudents(): Student[] {
-  const rng = random('classroom-demo-236');
+export function demoStudents(count = 236, seed = 'classroom-demo-236'): Student[] {
+  if(!Number.isInteger(count)||count<0) throw new Error('가상학생 수는 0 이상의 정수로 입력해 주세요.');
+  const rng = random(seed), studentsPerGrade = Math.ceil(count / 2);
   const weights = [25,9,5,5,11,13,4,6,23,9,4,7];
   const wheel = CLUBS.flatMap((c,i)=>Array(weights[i]).fill(c.id));
-  return Array.from({length:236},(_,i)=>{
-    const grade = i < 118 ? 5 : 6, k = i % 118, classNo = Math.floor(k / 30)+1, number = k%30+1;
+  return Array.from({length:count},(_,i)=>{
+    const grade = i < studentsPerGrade ? 5 : 6, k = i % studentsPerGrade, classNo = Math.floor(k / 30)+1, number = k%30+1;
     const choices: string[] = [];
     while(choices.length<3) { const c=wheel[Math.floor(rng()*wheel.length)]; if(!choices.includes(c)) choices.push(c); }
     return {id:`${grade}-${classNo}-${number}`,grade,classNo,number,name:`가상학생 ${String(i+1).padStart(3,'0')}`,gender:rng()<0.5?'남':'여',choices};
@@ -28,12 +29,34 @@ export function demoStudents(): Student[] {
 }
 export function validate(students: Student[], clubs: Club[]): string[] {
   const errors: string[] = [], ids = new Set<string>(), clubIds = new Set(clubs.map(c=>c.id));
-  if(!clubs.length || clubIds.size!==clubs.length) errors.push('동아리 설정을 확인해 주세요.');
+  if(!clubs.length || clubIds.size!==clubs.length || clubs.some(c=>!c.id?.trim())) errors.push('동아리 설정을 확인해 주세요.');
   for(const c of clubs) if(!Number.isInteger(c.min)||!Number.isInteger(c.max)||c.min<0||c.max<1||c.min>c.max) errors.push(`${c.name}: 최소·최대 인원을 확인해 주세요.`);
   for(const s of students) {
     if(ids.has(s.id)) errors.push(`${s.id}: 중복 신청입니다.`); ids.add(s.id);
     if(!s.name?.trim()||![s.grade,s.classNo,s.number].every(v=>Number.isInteger(v)&&v>0)||s.id!==`${s.grade}-${s.classNo}-${s.number}`) errors.push('학생 정보를 확인해 주세요.');
     if(!Array.isArray(s.choices)||s.choices.length!==3||new Set(s.choices).size!==3||s.choices.some(c=>!clubIds.has(c))) errors.push(`${s.id}: 서로 다른 동아리 3개를 선택해 주세요.`);
+  }
+  const fixedAssignments = new Map<string, string>();
+  for(const club of clubs) {
+    if(club.allocationMode!==undefined && club.allocationMode!=='lottery' && club.allocationMode!=='fixed') errors.push(`${club.name}: 배정 방식을 확인해 주세요.`);
+    if(club.fixedStudentIds!==undefined && !Array.isArray(club.fixedStudentIds)) {
+      errors.push(`${club.name}: 고정 명단을 확인해 주세요.`);
+      continue;
+    }
+    const fixedIds = club.fixedStudentIds ?? [];
+    if(club.allocationMode!=='fixed') {
+      if(fixedIds.length) errors.push(`${club.name}: 추첨 동아리에는 고정 명단을 지정할 수 없습니다.`);
+      continue;
+    }
+    if(fixedIds.length>club.max) errors.push(`${club.name}: 고정 명단이 최대 정원을 초과했습니다.`);
+    const rosterIds = new Set<string>();
+    for(const id of fixedIds) {
+      if(!ids.has(id)) errors.push(`${club.name}: 고정 명단의 학생 ${id}를 찾을 수 없습니다.`);
+      if(rosterIds.has(id)) errors.push(`${club.name}: 고정 명단에 ${id}가 중복되었습니다.`);
+      else if(fixedAssignments.has(id)) errors.push(`${id}: 여러 동아리의 고정 명단에 포함되어 있습니다.`);
+      rosterIds.add(id);
+      fixedAssignments.set(id,club.id);
+    }
   }
   return errors;
 }
@@ -41,8 +64,11 @@ export function allocate(students: Student[], clubs: Club[], seed: string): Resu
   const errors=validate(students,clubs); if(errors.length) throw new Error(errors[0]);
   if(!seed.trim()) throw new Error('추첨 번호를 입력해 주세요.');
   const placements: Record<string,Placement> = Object.fromEntries(students.map(s=>[s.id,{club:null,rank:null}]));
+  for(const club of clubs.filter(c=>c.allocationMode==='fixed')) {
+    for(const id of club.fixedStudentIds ?? []) placements[id]={club:club.id,rank:0,reason:'명단 고정',assignmentType:'fixed'};
+  }
   const rounds: Round[]=[];
-  for(let rank=1;rank<=3;rank++) for(const club of [...clubs].sort((a,b)=>a.id.localeCompare(b.id))) {
+  for(let rank=1;rank<=3;rank++) for(const club of clubs.filter(c=>c.allocationMode!=='fixed').sort((a,b)=>a.id.localeCompare(b.id))) {
     const occupied=Object.values(placements).filter(p=>p.club===club.id).length, seats=club.max-occupied;
     const candidates=students.filter(s=>!placements[s.id].club&&s.choices[rank-1]===club.id).map(s=>s.id).sort();
     const ordered=[...candidates], rng=random(`${seed}|${rank}|${club.id}`);
@@ -58,7 +84,8 @@ export function moveStudent(result:Result, students:Student[], clubs:Club[], id:
   if(!reason.trim()) throw new Error('조정 사유를 입력해 주세요.');
   const club=clubs.find(c=>c.id===destination); if(!club) throw new Error('동아리를 선택해 주세요.');
   const previous=result.placements[id];
+  if(previous.assignmentType==='fixed'||clubs.some(c=>c.id===previous.club&&c.allocationMode==='fixed')||club.allocationMode==='fixed') throw new Error('명단 고정 동아리의 학생은 이동할 수 없습니다. 설정에서 고정 명단을 수정한 뒤 다시 배정해 주세요.');
   if(previous.club===destination) throw new Error('현재 배정과 같은 동아리입니다.');
   if(Object.values(result.placements).filter(p=>p.club===destination).length>=club.max) throw new Error('선택한 동아리의 정원이 찼습니다.');
-  return {...result,placements:{...result.placements,[id]:{club:destination,rank:0,reason:reason.trim()}}};
+  return {...result,placements:{...result.placements,[id]:{club:destination,rank:0,reason:reason.trim(),assignmentType:'manual'}}};
 }

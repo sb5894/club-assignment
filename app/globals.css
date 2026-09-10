@@ -173,6 +173,29 @@ textarea{min-height:90px;resize:vertical}
 .receipt-choices{margin:25px 0;text-align:left;background:#f6f8fc;padding:20px;border-radius:9px}
 .receipt-choices>div{display:flex;gap:25px;padding:8px}.receipt-choices span{color:#8192b3;font-size:14px}.receipt-choices b{font-size:15px}
 .wide-dialog[data-slot=dialog-content]{max-width:620px}
+.club-detail-dialog[data-slot=dialog-content]{max-width:1050px;width:calc(100% - 32px)}
+.club-settings-dialog[data-slot=dialog-content]{max-width:880px;width:calc(100% - 32px)}
+.club-settings-list{max-height:56dvh;overflow:auto;padding-right:6px}
+.club-setting{padding:16px 0;border-bottom:1px solid var(--border)}
+.club-setting-fields{display:grid;grid-template-columns:minmax(130px,1fr) 88px 88px 210px;gap:14px;align-items:center}
+.club-setting-fields h3{font-weight:650;font-size:16px;margin:0}
+.club-setting-fields label{display:flex;align-items:center;gap:7px;font-size:14px;white-space:nowrap}
+.club-setting-fields input{min-width:0;padding:8px;min-height:44px}
+.fixed-roster-editor{margin-top:14px;padding:16px;background:var(--muted);border-radius:10px}
+.fixed-roster-editor summary{cursor:pointer;font-size:15px;font-weight:600}
+.fixed-roster-editor summary strong{margin-left:10px;color:var(--primary)}
+.fixed-roster-editor p{margin-top:10px}
+.fixed-search{margin-top:12px;font-size:14px}
+.fixed-selected{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}
+.fixed-selected [data-slot=button]{background:var(--card);font-size:14px;min-height:36px}
+.fixed-candidates{max-height:225px;overflow:auto;margin-top:12px;background:var(--card);border:1px solid var(--border);border-radius:8px}
+.fixed-candidate{display:flex;align-items:center;gap:12px;padding:11px 14px;border-bottom:1px solid var(--border);font-size:14px;cursor:pointer}
+.fixed-candidate:last-child{border-bottom:0}
+.fixed-candidate small{margin-left:auto;font-size:12px;color:var(--muted-foreground)}
+.fixed-chip{background:#edf0ff;color:#4358ad}
+.allocation-card .fixed-summary{padding:10px 12px;background:#2b4069;border-radius:8px;color:#e0e8ff;font-size:14px}
+.winning-choice{font-weight:800;color:#284dbd}
+@media(max-width:700px){.club-setting-fields{grid-template-columns:minmax(100px,1fr) 82px 82px;gap:10px}.club-setting-fields>.picker{grid-column:1/-1}.fixed-roster-editor{padding:12px}.fixed-candidate{flex-wrap:wrap}.fixed-candidate small{margin-left:28px}.club-settings-dialog[data-slot=dialog-content],.club-detail-dialog[data-slot=dialog-content]{padding:20px}}
 .settings-list{max-height:55dvh;overflow:auto}
 .settings-list>div{display:grid;grid-template-columns:minmax(140px,1fr) 110px 110px;gap:16px;align-items:center;padding:11px 0;border-bottom:1px solid #edf0f6}
 .settings-list b{font-size:15px;font-weight:600}
