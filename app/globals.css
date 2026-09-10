@@ -195,6 +195,47 @@ textarea{min-height:90px;resize:vertical}
 .fixed-chip{background:#edf0ff;color:#4358ad}
 .allocation-card .fixed-summary{padding:10px 12px;background:#2b4069;border-radius:8px;color:#e0e8ff;font-size:14px}
 .winning-choice{font-weight:800;color:#284dbd}
+.portal-login{max-width:500px;margin:60px auto;padding:0 20px;display:flex;flex-direction:column;gap:24px}
+.portal-login-card{padding:32px}
+.portal-login h1{font-size:28px;margin:12px 0}
+.portal-login .application-form{position:static;margin:0;padding:30px;width:100%}
+.portal-login-card form{margin-top:24px}
+.portal-symbol{color:var(--primary)}
+.portal-login-help{margin-top:24px;font-size:14px}
+.portal-login .form-error,.portal-login .notice{margin:0}
+.portal-actions{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.portal-import{margin-bottom:24px}
+.portal-import-body{padding:0 24px 24px;display:flex;flex-direction:column;gap:14px}
+.portal-import-body textarea{min-height:150px;font-size:14px;font-family:inherit}
+.portal-import-preview{max-height:260px;overflow:auto;border:1px solid var(--border);border-radius:8px}
+.portal-row-actions{display:flex;flex-wrap:wrap;gap:6px;min-width:220px}
+.portal-row-actions [data-slot=button]{font-size:13px;padding:7px 9px;min-height:36px}
+.portal-history-entry{padding:16px 0;border-bottom:1px solid var(--border)}
+.portal-history-entry h3{font-size:16px;font-weight:700;margin:0 0 10px}
+.portal-history-entry h3 small{display:block;font-size:13px;font-weight:400;color:var(--muted-foreground)}
+.portal-history-entry ol{list-style:none;padding:0;margin:0}
+.portal-history-entry li{display:flex;gap:18px;padding:6px 0;font-size:15px}
+.portal-history-entry li span{color:var(--muted-foreground)}
+.portal-code-table code{font-family:monospace;font-size:15px;font-weight:700;white-space:nowrap;letter-spacing:.5px}
+.teacher-portal .metrics p{font-size:13px}
+.teacher-portal select.picker{min-height:44px;border:1px solid var(--border);padding:9px 12px;border-radius:8px;background:var(--card);font-size:14px}
+.teacher-portal .roster-scroll{max-height:600px}
+.saved-application{margin-bottom:30px}
+.saved-choices{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;padding:0 24px 22px}
+.saved-choices>div{padding:18px;background:var(--accent);border-radius:10px}
+.saved-choices span{display:block;color:var(--muted-foreground);font-size:14px;margin-bottom:7px}
+.saved-choices strong{font-size:20px;word-break:keep-all}
+.saved-confirmation{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:14px;padding:0 24px 22px}
+.saved-confirmation p{font-size:15px}
+.verification-badge{display:flex;align-items:center;gap:7px;font-size:14px;color:#247044;font-weight:650;white-space:nowrap}
+.student-preference{margin-top:18px}
+.student-preference label{display:block;font-size:15px;font-weight:600;margin-bottom:6px}
+.resubmit-note{margin-top:22px;font-size:14px;padding:12px;background:var(--muted);border-radius:8px}
+.my-placement{padding:22px 24px;background:var(--accent);border-top:1px solid var(--border)}
+.my-placement strong{display:block;margin-top:8px;font-size:24px;color:var(--primary)}
+.student-portal .notice{margin-bottom:18px}
+.student-portal .form-error{margin-bottom:18px}
+@media(max-width:600px){.portal-login{margin-top:30px}.portal-login-card{padding:24px}.student-portal .topbar{min-height:76px;flex-wrap:nowrap}.student-portal .brand{font-size:17px}.saved-choices{grid-template-columns:1fr;padding:0 16px 20px;gap:8px}.saved-choices>div{display:flex;align-items:center;gap:20px;padding:14px}.saved-choices span{margin:0;min-width:44px}.saved-choices strong{font-size:18px}.saved-confirmation{padding:0 16px 20px}.saved-application .panel-heading{flex-wrap:wrap}.portal-import-body{padding:0 16px 20px}.teacher-portal .page-heading h1{font-size:25px;flex-wrap:wrap}.portal-actions{gap:6px}.portal-actions [data-slot=button]{font-size:13px;padding:8px 10px}.my-placement{padding:18px 16px}}
 @media(max-width:700px){.club-setting-fields{grid-template-columns:minmax(100px,1fr) 82px 82px;gap:10px}.club-setting-fields>.picker{grid-column:1/-1}.fixed-roster-editor{padding:12px}.fixed-candidate{flex-wrap:wrap}.fixed-candidate small{margin-left:28px}.club-settings-dialog[data-slot=dialog-content],.club-detail-dialog[data-slot=dialog-content]{padding:20px}}
 .settings-list{max-height:55dvh;overflow:auto}
 .settings-list>div{display:grid;grid-template-columns:minmax(140px,1fr) 110px 110px;gap:16px;align-items:center;padding:11px 0;border-bottom:1px solid #edf0f6}

@@ -1,104 +1,14 @@
-'use client';
-import { useMemo, useState, type SyntheticEvent } from 'react';
-import { Users, LayoutGrid, Shuffle, Download, ArrowRight, Settings2, RotateCcw, Check, Send, Search, GraduationCap, LockKeyhole, AlertCircle, ClipboardList } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { AlertDialog, AlertDialogContent, AlertDialogTitle, AlertDialogDescription, AlertDialogAction, AlertDialogCancel, AlertDialogFooter } from '@/components/ui/alert-dialog';
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
-import { CLUBS, demoStudents, allocate, moveStudent, validate, type Club, type Student, type Result, type Placement } from '@/lib/allocation';
-import { ClubSettings } from '@/components/club-settings';
-import { ClubDetail } from '@/components/club-detail';
-import { useDemoTools } from '@/lib/use-demo-tools';
+﻿import { headers } from 'next/headers';
+import { StudentPortal } from '@/components/student-portal';
+import { authenticate } from '@/lib/server/auth';
+import { portalEnv } from '@/lib/server/runtime';
+import { getStudentState } from '@/lib/server/store';
 
-function Picker({value,onChange,options,label,disabled=false,id}: {id?:string;value:string;onChange:(v:string)=>void;options:{value:string;label:string;disabled?:boolean}[];label:string;disabled?:boolean}) {
-  return <Select value={value||null} onValueChange={v=>onChange(v??'')} items={options} disabled={disabled}><SelectTrigger id={id} className="picker" aria-label={label}><SelectValue placeholder="선택해 주세요"/></SelectTrigger><SelectContent>{options.map(o=><SelectItem key={o.value} value={o.value} disabled={o.disabled}>{o.label}</SelectItem>)}</SelectContent></Select>;
-}
-function saveFile(name:string,content:string,type='text/csv;charset=utf-8'){
- const url=URL.createObjectURL(new Blob([type.startsWith('text/csv')?'\uFEFF':'',content],{type}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
-}
-const placementLabel=(p:Placement|undefined)=>p?.club?(p.assignmentType==='fixed'?'명단 고정':p.rank===0?'교사 조정':p.rank+'지망'):'';
-const csv=(rows:(string|number|null|undefined)[][])=>rows.map(row=>row.map(v=>{let t=String(v??'');if(/^[=+@\-\t\r]/.test(t))t="'"+t;return '"'+t.replaceAll('"','""')+'"';}).join(',')).join('\r\n');
-
-export default function Home(){
- const [view,setView]=useState('teacher'),[students,setStudents]=useState<Student[]>(demoStudents),[clubs,setClubs]=useState<Club[]>(()=>CLUBS.map(c=>({...c})));
- const [result,setResult]=useState<Result|null>(null),[seed,setSeed]=useState('CLUB-2026-01'),[locked,setLocked]=useState(false),[notice,setNotice]=useState('');
- const [confirm,setConfirm]=useState<'run'|'reset'|'lock'|null>(null),[settings,setSettings]=useState(false),[draft,setDraft]=useState<Club[]>([]),[settingsError,setSettingsError]=useState('');
- const [detail,setDetail]=useState<string|null>(null),[filter,setFilter]=useState('all'),[query,setQuery]=useState('');
- const [editing,setEditing]=useState<Student|null>(null),[destination,setDestination]=useState(''),[reason,setReason]=useState(''),[editError,setEditError]=useState('');
- const [choices,setChoices]=useState(['','','']),[form,setForm]=useState({grade:'6',classNo:'5',number:'1',name:'체험학생',gender:'미입력'});
- const [receipt,setReceipt]=useState<Student|null>(null),[formError,setFormError]=useState('');
- const [audit,setAudit]=useState<{student:string;from:string|null;to:string;reason:string}[]>([]);
- const clubName=(id:string|null|undefined)=>clubs.find(c=>c.id===id)?.name??'미배정';
- const fixedIds=useMemo(()=>new Set(clubs.filter(c=>c.allocationMode==='fixed').flatMap(c=>c.fixedStudentIds??[])),[clubs]);
- const stats=useMemo(()=>clubs.map(c=>{const members=result?students.filter(s=>result.placements[s.id]?.club===c.id):[];return {...c,reserved:c.allocationMode==='fixed'?(c.fixedStudentIds?.length??0):0,eligibleFirst:students.filter(s=>s.choices[0]===c.id&&!fixedIds.has(s.id)).length,first:students.filter(s=>s.choices[0]===c.id).length,members,count:members.length};}),[clubs,students,result,fixedIds]);
- const placed=result?Object.values(result.placements).filter(p=>p.club).length:0,waiting=result?students.length-placed:0,shortage=result?stats.filter(c=>c.count<c.min):[],overCount=stats.filter(c=>c.eligibleFirst>c.max-c.reserved).length;
- const matches=students.filter(s=>{const p=result?.placements[s.id];return (filter==='all'||(filter==='waiting'&&result&&!p?.club)||p?.club===filter)&&(s.name+' '+s.id).includes(query.trim());});
- const options=clubs.map(c=>({value:c.id,label:c.name}));
- const fixedCount=clubs.filter(c=>c.allocationMode==='fixed').reduce((count,c)=>count+(c.fixedStudentIds?.length??0),0);
- useDemoTools({students:students.length,clubs:clubs.length,allocated:!!result,placed,waiting,confirmed:locked},()=>{setView('student');setReceipt(null);});
- function run(){try{setResult(allocate(students,clubs,seed));setAudit([]);setNotice('1·2·3지망 배정이 끝났어요. 미배정자와 최소 인원 미달 동아리를 확인해 주세요.');}catch(e){setNotice((e as Error).message);}setConfirm(null);}
- function reset(){setStudents(demoStudents());setClubs(CLUBS.map(c=>({...c})));setResult(null);setLocked(false);setSeed('CLUB-2026-01');setAudit([]);setFilter('all');setQuery('');setReceipt(null);setChoices(['','','']);setConfirm(null);setNotice('가상 학생 236명의 처음 상태로 돌아왔어요.');}
- function exportRoster(onlyWaiting=false){
-  const rows=students.filter(s=>!onlyWaiting||(result&&!result.placements[s.id]?.club));
-  saveFile(onlyWaiting?'동아리_미배정자.csv':'동아리_학생별결과.csv',csv([['학년','반','번호','이름','성별','1지망','2지망','3지망','배정 동아리','배정 구분','조정 사유'],...rows.map(s=>{const p=result?.placements[s.id];return [s.grade,s.classNo,s.number,s.name,s.gender,...s.choices.map(clubName),result?clubName(p?.club):'배정 전',placementLabel(p),p?.reason??''];})]));
- }
- function submit(e:SyntheticEvent<HTMLFormElement>){
-  e.preventDefault();setFormError('');if(result){setFormError('배정이 시작되어 신청이 마감되었어요.');return;}
-  const s:Student={id:`${Number(form.grade)}-${Number(form.classNo)}-${Number(form.number)}`,grade:Number(form.grade),classNo:Number(form.classNo),number:Number(form.number),name:form.name.trim(),gender:form.gender,choices:[...choices]};
-  if(students.some(a=>a.id===s.id)){setFormError('이 학년·반·번호로 이미 신청했어요. 다른 번호로 체험해 주세요.');return;}
-  const errors=validate([...students,s],clubs);if(errors.length){setFormError(errors[0]);return;}setStudents(prev=>[...prev,s]);setReceipt(s);
- }
- function saveSettings(){const errors=validate(students,draft);if(errors.length){setSettingsError(errors[0]);return;}setClubs(draft);setSettings(false);setNotice('동아리 정원과 배정 방식, 고정 명단을 저장했어요.');}
- function adjust(){try{if(!result||!editing||locked)return;const next=moveStudent(result,students,clubs,editing.id,destination,reason);setAudit(prev=>[...prev,{student:editing.id,from:result.placements[editing.id].club,to:destination,reason:reason.trim()}]);setResult(next);setEditing(null);setNotice('배정을 조정했어요. 동아리별 인원도 함께 갱신했어요.');}catch(e){setEditError((e as Error).message);}}
- function exportAudit(){saveFile('동아리_추첨기록.json',JSON.stringify({version:1,seed:result?.seed,clubs,students,result,adjustments:audit,confirmed:locked},null,2),'application/json');}
- return <div className="app"><Tabs value={view} onValueChange={v=>setView(String(v))}>
-  <header className="topbar"><div className="brand"><span className="brand-mark"><LayoutGrid size={23}/></span><span>우리 동아리<small>신청과 배정</small></span></div><TabsList className="main-nav"><TabsTrigger value="teacher"><ClipboardList/>선생님 화면</TabsTrigger><TabsTrigger value="student"><GraduationCap/>학생 신청</TabsTrigger></TabsList><span className="demo-pill"><span/>DEMO</span></header>
-  <div className="demo-note"><span>체험용 가상 자료</span>이 화면에서만 반영돼요. 새로고침하면 초기화되며, 다른 기기와 공유되지 않아요.</div>
-  <TabsContent value="teacher" className="workspace">
-   <div className="page-heading"><div><div className="eyebrow">동아리 운영 / {result?'배정 결과':'신청 현황'}</div><h1>동아리 배정<span className={'status '+(result?'done':'')}>{locked?'최종 확정':result?'검토 중':'신청 접수 중'}</span></h1><p>신청부터 추첨, 마지막 인원 조정까지 한곳에서.</p></div><Button variant="outline" className="secondary" onClick={()=>{setView('student');setReceipt(null);}}><GraduationCap size={18}/>학생 신청 체험<ArrowRight size={16}/></Button></div>
-   {notice&&<output className="notice"><Check size={18}/><span>{notice}</span><button aria-label="알림 닫기" onClick={()=>setNotice('')}>×</button></output>}
-   <div className="metrics">
-    <div><span><Users size={17}/>신청 학생</span><strong>{students.length}<small>명</small></strong><p>가상 자료로 체험 중</p></div>
-    <div><span><LayoutGrid size={17}/>운영 동아리</span><strong>{clubs.length}<small>개</small></strong><p>또래상담 6~8명 · 그 외 15~25명 기본값</p></div>
-    <div><span><Shuffle size={17}/>{result?'배정 완료':'1지망 추첨 대상'}</span><strong>{result?placed:overCount}<small>{result?'명':'개'}</small></strong><p>{result?'지망 배정·명단 고정·교사 조정 포함':'최대 인원을 넘은 동아리'}</p></div>
-    <div className={waiting?'attention':''}><span><AlertCircle size={17}/>{result?'미배정 학생':'배정 순서'}</span><strong>{result?waiting:<span className="rank-sequence">1 <b>→</b> 2 <b>→</b> 3</span>}<small>{result?'명':'지망'}</small></strong><p>{result?'명단 확인 후 재선택 안내':'앞 지망 탈락자만 다음 단계로'}</p></div>
-   </div>
-   <div className="dashboard-grid">
-    <section className="panel club-panel"><div className="panel-heading"><div><h2>동아리별 {result?'배정':'신청'} 현황</h2><p>{result?'동아리를 누르면 배정 명단과 지망별 신청자를 확인해요.':'동아리를 누르면 1·2·3지망 신청자를 확인해요.'}</p></div><Button variant="ghost" disabled={!!result} onClick={()=>{setDraft(clubs.map(c=>({...c})));setSettingsError('');setSettings(true);}}><Settings2 size={16}/>정원·배정 설정</Button></div>
-     <div className="club-table"><div className="club-table-head"><span>동아리</span><span>{result?'배정 인원':'1지망 신청'} / 최대 정원</span><span>상태</span></div>{stats.map((c,i)=>{const n=result?c.count:c.first,over=!result&&c.eligibleFirst>c.max-c.reserved,under=!!result&&n<c.min;return <button className="club-row" key={c.id} onClick={()=>setDetail(c.id)}><span className="club-label"><span className={'club-index tone-'+(i%4)}>{String(i+1).padStart(2,'0')}</span><span>{c.name}<small>{c.category}{c.reserved>0?` · 고정 ${c.reserved}명`:''}</small></span></span><span className="capacity"><span className="capacity-track"><span className={over?'over':under?'under':''} style={{width:Math.min(100,n/c.max*100)+'%'}}/></span><span className={over?'over-text':''}><b>{n}</b> / {c.max}</span></span><span className={'chip '+(over?'orange':under?'amber':result?'green':'neutral')}>{over?'추첨 필요':under?'최소 미달':result?(n===c.max?'정원 마감':'배정 완료'):'정원 이내'}</span></button>;})}</div>
-     <p className="panel-foot">신청 인원에는 고정 학생도 포함돼요. 고정 학생을 먼저 배정하고, 남은 정원과 고정 학생을 제외한 신청 인원으로 추첨 필요 여부를 판단해요.</p>
-    </section>
-    <aside className="right-column">
-     <section className="allocation-card"><span className="section-number">ALLOCATION</span><h2>{locked?'배정을 확정했어요':result?'배정 결과를 살펴봐요':'준비되면, 한 번에 배정'}</h2><p>{result?'미배정 학생과 동아리별 인원을 확인한 뒤 최종 확정해 주세요.':'고정 명단을 먼저 배정하고, 나머지 학생은 1지망부터 정원 초과 시 동일 확률로 추첨해요.'}</p>
-      {clubs.some(c=>c.allocationMode==='fixed')&&<p className="fixed-summary">명단 고정 {fixedCount}명 선배정 · 모든 동아리의 남은 정원은 지망별 배정</p>}<ol className="steps">{[1,2,3].map(n=><li key={n}><span className={result?'checked':''}>{result?<Check size={14}/>:n}</span><div><b>{n}지망 배정</b><small>{result?Object.values(result.placements).filter(p=>p.rank===n).length+'명 배정':n===1?'고정 명단 외 신청 학생':'앞 단계 미배정 학생'}</small></div></li>)}</ol>
-      {!result?<><label className="seed-label" htmlFor="seed">추첨 번호</label><input id="seed" value={seed} onChange={e=>setSeed(e.target.value)} maxLength={80}/><small className="seed-help">입력 자료와 번호가 같으면 결과도 같아요.</small><Button className="run-button" onClick={()=>setConfirm('run')} disabled={!seed.trim()||students.length===0}><Shuffle size={18}/>자동 배정 시작<ArrowRight size={18}/></Button></>:<><Button className="run-button" disabled={locked} onClick={()=>setConfirm('lock')}>{locked?<LockKeyhole size={18}/>:<Check size={18}/>}{locked?'최종 확정 완료':'검토 후 최종 확정'}</Button><Button className="audit-button" variant="ghost" onClick={exportAudit}><Download size={16}/>추첨·조정 기록 저장</Button></>}
-     </section>
-     <section className="panel review-panel"><h2>선생님 확인 사항</h2>{result?<><button className="review-item" onClick={()=>{setFilter('waiting');document.getElementById('roster')?.scrollIntoView({behavior:'smooth'});}}><span>3지망까지 미배정</span><b>{waiting}명 <ArrowRight size={14}/></b></button><div className="review-item"><span>최소 인원 미달</span><b>{shortage.length}개</b></div>{shortage.length>0&&<p className="shortage-list">{shortage.map(c=>c.name+' '+c.count+'/'+c.min+'명').join(' · ')}</p>}<p>학년·성별 분포는 동아리별 상세 화면에서 확인해요. 추첨 확률에는 반영하지 않아요.</p></>:<><div className="review-line"><Check size={17}/><span>학생 번호·지망 중복 검사</span></div><div className="review-line"><Check size={17}/><span>또래상담 최대 8명 적용</span></div><div className="review-line"><Check size={17}/><span>미배정 학생 별도 명단</span></div></>}</section>
-     <Button variant="ghost" className="reset-button" onClick={()=>setConfirm('reset')}><RotateCcw size={15}/>데모 처음부터 다시</Button>
-    </aside>
-   </div>
-   <section className="panel roster-panel" id="roster"><div className="panel-heading"><div><h2>학생별 {result?'배정 결과':'신청 내역'} <span className="count-label">{matches.length}명</span></h2><p>{result?'학생 재선택 결과를 반영하거나 배정 동아리를 조정하세요.':'학년·반·번호를 기준으로 신청을 구분해요.'}</p></div><div className="export-buttons">{result&&<Button variant="outline" onClick={()=>exportRoster(true)}><Download size={16}/>미배정자 CSV</Button>}<Button variant="outline" onClick={()=>exportRoster()}><Download size={16}/>전체 CSV</Button></div></div>
-    <div className="roster-tools"><div className="search-field"><Search size={17}/><input aria-label="학생 검색" placeholder="이름 또는 학년-반-번호 검색" value={query} onChange={e=>setQuery(e.target.value)}/></div>{result&&<Picker label="배정 결과 필터" value={filter} onChange={setFilter} options={[{value:'all',label:'전체 학생'},{value:'waiting',label:'미배정 학생'},...options]}/>}</div>
-    <div className="roster-scroll"><Table><TableHeader><TableRow>{['학년·반·번호','이름','1지망','2지망','3지망',...(result?['배정 결과','조정']:[])].map(h=><TableHead key={h}>{h}</TableHead>)}</TableRow></TableHeader><TableBody>{matches.map(s=>{const p=result?.placements[s.id];return <TableRow key={s.id}><TableCell className="student-id">{s.id}</TableCell><TableCell><b>{s.name}</b></TableCell>{s.choices.map((c,i)=><TableCell key={i}>{p?.rank===i+1&&p.club===c?<strong className="winning-choice">{clubName(c)}</strong>:clubName(c)}</TableCell>)}{result&&<><TableCell><span className={'result-label '+(!p?.club?'unplaced':'')}>{clubName(p?.club)}</span><small className="rank-label">{p?.club?placementLabel(p):'재선택·교사 조정 필요'}</small></TableCell><TableCell><Button variant="outline" disabled={locked||p?.assignmentType==='fixed'} onClick={()=>{setEditing(s);setDestination('');setReason('');setEditError('');}}>조정</Button></TableCell></>}</TableRow>;})}</TableBody></Table></div>{matches.length===0&&<div className="empty-message">조건에 맞는 학생이 없어요.</div>}<p className="panel-foot">CSV 파일은 엑셀에서 열 수 있어요. 데모에는 실제 학생 개인정보를 입력하지 마세요.</p>
-   </section>
-  </TabsContent>
-  <TabsContent value="student" className="student-workspace">
-   <div className="student-heading"><span className="eyebrow">학생 신청</span><h1>어떤 동아리에 함께할까요?</h1><p>서로 다른 동아리 3개를 원하는 순서대로 골라 주세요.</p></div>
-   {receipt?<section className="receipt panel"><span className="receipt-check"><Check size={34}/></span><h2>신청을 제출했어요!</h2><p>{receipt.grade}학년 {receipt.classNo}반 {receipt.number}번 · {receipt.name}</p><div className="receipt-choices">{receipt.choices.map((c,i)=><div key={c}><span>{i+1}지망</span><b>{clubName(c)}</b></div>)}</div><p>체험 신청이 이 화면의 선생님 명단에 추가되었어요.<br/>최종 배정은 추첨 후 결정돼요.</p><Button className="primary" onClick={()=>{setView('teacher');setNotice('방금 제출한 체험 신청을 명단에 추가했어요.');}}>선생님 화면에서 확인<ArrowRight size={17}/></Button></section>:<div className="student-grid">
-    <section><div className="student-section-label"><LayoutGrid size={18}/>우리 학교 동아리 <b>12</b></div><div className="choice-cards">{clubs.map((c,i)=>{const rank=choices.indexOf(c.id);return <button type="button" key={c.id} className={'choice-card '+(rank>=0?'selected':'')} disabled={!!result} onClick={()=>{if(rank>=0){setChoices(choices.map(x=>x===c.id?'':x));return;}const index=choices.indexOf('');if(index<0){setFormError('이미 3개를 골랐어요. 선택한 동아리를 다시 누르면 취소할 수 있어요.');return;}setChoices(choices.map((x,j)=>j===index?c.id:x));setFormError('');}}><span className="choice-top"><span className={'club-index tone-'+(i%4)}>{String(i+1).padStart(2,'0')}</span>{rank>=0&&<span className="choice-rank">{rank+1}지망 <Check size={13}/></span>}</span><h2>{c.name}</h2><span className="choice-meta">{c.allocationMode==='fixed'?'일부 고정 · 남은 정원 추첨':c.category}<span>최대 {c.max}명</span></span></button>;})}</div><p className="muted student-tip">누르면 빈 지망 칸부터 채워져요. 고정 학생이 있는 동아리도 신청할 수 있으며, 남은 정원에 따라 지망별로 배정해요.</p></section>
-    <form className="panel application-form" onSubmit={submit}><h2>나의 동아리 신청</h2><p>체험용 이름과 번호로 입력해 주세요.</p>{result&&<div className="form-error">배정이 시작되어 신청이 마감되었어요. 선생님 화면에서 데모를 초기화하면 다시 신청할 수 있어요.</div>}<div className="identity-fields"><label htmlFor="student-grade">학년<Picker id="student-grade" label="학년" value={form.grade} onChange={v=>setForm({...form,grade:v})} options={[{value:'5',label:'5학년'},{value:'6',label:'6학년'}]}/></label><label>반<input required type="number" min="1" max="99" value={form.classNo} onChange={e=>setForm({...form,classNo:e.target.value})}/></label><label>번호<input required type="number" min="1" max="99" value={form.number} onChange={e=>setForm({...form,number:e.target.value})}/></label></div>
-     <label className="field-label">이름<input required maxLength={30} value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/></label><label className="field-label" htmlFor="student-gender">성별 <small>분포 확인용 · 선택 입력</small><Picker id="student-gender" label="성별" value={form.gender} onChange={v=>setForm({...form,gender:v})} options={['미입력','남','여'].map(v=>({value:v,label:v}))}/></label>
-     <div className="preference-fields">{choices.map((value,i)=><label key={i}><span className="preference-number">{i+1}</span><div><b>{i+1}지망</b><Picker label={i+1+'지망'} value={value} onChange={v=>{setChoices(choices.map((x,j)=>j===i?v:x));setFormError('');}} options={options.map(o=>({...o,disabled:choices.includes(o.value)&&o.value!==value}))}/></div></label>)}</div>{formError&&<p className="form-error" role="alert">{formError}</p>}<Button className="primary submit-button" type="submit" disabled={!!result}><Send size={17}/>신청 제출하기</Button><p className="form-foot">세 지망을 모두 골라야 제출할 수 있어요.<br/>동아리 신청은 선착순이 아니에요.</p>
-    </form>
-   </div>}
-  </TabsContent>
-  <footer className="footer"><span>우리 동아리</span><span>신청 → 지망별 추첨 → 선생님 검토</span><span>체험용 데모</span></footer>
- </Tabs>
- <AlertDialog open={!!confirm} onOpenChange={v=>{if(!v)setConfirm(null);}}><AlertDialogContent><AlertDialogTitle>{confirm==='reset'?'데모를 처음부터 다시 할까요?':confirm==='lock'?'현재 배정을 최종 확정할까요?':'신청을 마감하고 배정할까요?'}</AlertDialogTitle><AlertDialogDescription>{confirm==='reset'?'체험 신청, 정원 변경, 추첨 결과와 조정 내역이 지워지고 가상 학생 236명으로 돌아갑니다.':confirm==='lock'?`미배정 ${waiting}명, 최소 인원 미달 ${shortage.length}개입니다. 확정하면 조정 버튼이 잠깁니다. 결과를 저장해 주세요.`:`학생 ${students.length}명 중 고정 명단 ${fixedCount}명을 먼저 배정하고, 나머지는 1→2→3지망 순서로 배정합니다. 추첨 번호: ${seed}. 배정 후에는 신청과 정원 변경이 마감됩니다.`}</AlertDialogDescription><AlertDialogFooter><AlertDialogCancel>취소</AlertDialogCancel><AlertDialogAction onClick={confirm==='reset'?reset:confirm==='run'?run:()=>{setLocked(true);setConfirm(null);setNotice('최종 확정했어요. 결과와 추첨 기록을 저장해 주세요.');}}>{confirm==='reset'?'초기화':confirm==='run'?'자동 배정 실행':'최종 확정'}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
- <ClubSettings open={settings} onOpenChange={setSettings} draft={draft} onChange={setDraft} students={students} error={settingsError} onSave={saveSettings}/>
- <ClubDetail key={`${detail}-${!!result}`} club={clubs.find(c=>c.id===detail)} clubs={clubs} students={students} result={result} open={!!detail} onOpenChange={open=>{if(!open)setDetail(null);}}/>
- <Dialog open={!!editing} onOpenChange={v=>{if(!v)setEditing(null);}}><DialogContent><DialogTitle>학생 배정 조정</DialogTitle><DialogDescription>{editing?.id} · {editing?.name}<br/>현재: {clubName(result?.placements[editing?.id??'']?.club)}</DialogDescription><Picker label="이동할 동아리" value={destination} onChange={setDestination} options={stats.map(c=>({value:c.id,label:`${c.name} (${c.count}/${c.max}명)`,disabled:c.count>=c.max||result?.placements[editing?.id??'']?.club===c.id}))}/><label className="field-label">조정 사유<textarea value={reason} onChange={e=>setReason(e.target.value)} placeholder="예: 학생 재선택 결과 반영" maxLength={300}/></label>{editError&&<p className="form-error" role="alert">{editError}</p>}<Button className="primary" onClick={adjust}>배정 변경</Button></DialogContent></Dialog>
- </div>;
+export const dynamic = 'force-dynamic';
+export default async function StudentPage() {
+  const request = new Request('https://portal.invalid/', { headers: new Headers(await headers()) });
+  const environment = portalEnv();
+  const session = await authenticate(request, environment, 'student');
+  const state = session?.studentId ? await getStudentState(environment.DB, session.studentId) : null;
+  return <StudentPortal initialState={state}/>;
 }

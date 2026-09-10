@@ -1,0 +1,9 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "club-assignment-portal",
+  "main": "vinext/server/fetch-handler",
+  "compatibility_date": "2026-05-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": { "directory": "dist/client", "binding": "ASSETS", "not_found_handling": "none" },
+  "d1_databases": [{ "binding": "DB", "database_name": "club-assignment-local", "database_id": "00000000-0000-4000-8000-000000000000", "migrations_dir": "drizzle" }]
+}

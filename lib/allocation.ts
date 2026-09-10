@@ -29,12 +29,13 @@ export function demoStudents(count = 236, seed = 'classroom-demo-236'): Student[
 }
 export function validate(students: Student[], clubs: Club[]): string[] {
   const errors: string[] = [], ids = new Set<string>(), clubIds = new Set(clubs.map(c=>c.id));
+  const fixedIds = new Set(clubs.filter(c=>c.allocationMode==='fixed'&&Array.isArray(c.fixedStudentIds)).flatMap(c=>c.fixedStudentIds??[]));
   if(!clubs.length || clubIds.size!==clubs.length || clubs.some(c=>!c.id?.trim())) errors.push('동아리 설정을 확인해 주세요.');
   for(const c of clubs) if(!Number.isInteger(c.min)||!Number.isInteger(c.max)||c.min<0||c.max<1||c.min>c.max) errors.push(`${c.name}: 최소·최대 인원을 확인해 주세요.`);
   for(const s of students) {
     if(ids.has(s.id)) errors.push(`${s.id}: 중복 신청입니다.`); ids.add(s.id);
     if(!s.name?.trim()||![s.grade,s.classNo,s.number].every(v=>Number.isInteger(v)&&v>0)||s.id!==`${s.grade}-${s.classNo}-${s.number}`) errors.push('학생 정보를 확인해 주세요.');
-    if(!Array.isArray(s.choices)||s.choices.length!==3||new Set(s.choices).size!==3||s.choices.some(c=>!clubIds.has(c))) errors.push(`${s.id}: 서로 다른 동아리 3개를 선택해 주세요.`);
+    if(!(fixedIds.has(s.id)&&Array.isArray(s.choices)&&s.choices.length===0)&&(!Array.isArray(s.choices)||s.choices.length!==3||new Set(s.choices).size!==3||s.choices.some(c=>!clubIds.has(c)))) errors.push(`${s.id}: 서로 다른 동아리 3개를 선택해 주세요.`);
   }
   const fixedAssignments = new Map<string, string>();
   for(const club of clubs) {
