@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/compone
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import type { Club, Student } from '@/lib/allocation';
 
-const modes = [{ value: 'lottery', label: '지망별 추첨' }, { value: 'fixed', label: '임의배정 · 명단 고정' }];
+const modes = [{ value: 'lottery', label: '지망별 추첨' }, { value: 'fixed', label: '일부 고정 후 지망별 추첨' }];
 
 export function ClubSettings({ open, onOpenChange, draft, onChange, students, error, onSave }: {
   open: boolean; onOpenChange: (open: boolean) => void; draft: Club[];
@@ -18,7 +18,7 @@ export function ClubSettings({ open, onOpenChange, draft, onChange, students, er
   return <Dialog open={open} onOpenChange={onOpenChange}>
     <DialogContent className="club-settings-dialog">
       <DialogTitle>동아리 정원·배정 설정</DialogTitle>
-      <DialogDescription>명단 고정 동아리는 지정한 학생만 배정해요. 해당 학생과 동아리는 1·2·3지망 추첨에서 제외되며, 빈자리도 자동으로 채우지 않아요.</DialogDescription>
+      <DialogDescription>지정한 학생만 먼저 배정하고 추첨에서 제외해요. 해당 동아리의 남은 정원은 다른 학생들을 1→2→3지망 순서로 배정하며, 정원을 넘으면 추첨해요.</DialogDescription>
       <div className="club-settings-list">
         {draft.map(c => {
           const fixed = c.allocationMode === 'fixed';
@@ -30,7 +30,7 @@ export function ClubSettings({ open, onOpenChange, draft, onChange, students, er
               <label>최소<input aria-label={`${c.name} 최소 인원`} type="number" min="0" max="999" value={c.min} onChange={e => update(c.id, { min: Number(e.target.value) })}/></label>
               <label>최대<input aria-label={`${c.name} 최대 인원`} type="number" min="1" max="999" value={c.max} onChange={e => update(c.id, { max: Number(e.target.value) })}/></label>
               <Select value={c.allocationMode ?? 'lottery'} items={modes} onValueChange={value => {
-                if (value === 'lottery' || value === 'fixed') update(c.id, { allocationMode: value, fixedStudentIds: [] });
+                if ((value === 'lottery' || value === 'fixed') && value !== (c.allocationMode ?? 'lottery')) update(c.id, { allocationMode: value, fixedStudentIds: [] });
               }}>
                 <SelectTrigger className="picker" aria-label={`${c.name} 배정 방식`}><SelectValue/></SelectTrigger>
                 <SelectContent>{modes.map(mode => <SelectItem key={mode.value} value={mode.value}>{mode.label}</SelectItem>)}</SelectContent>
@@ -52,7 +52,7 @@ export function ClubSettings({ open, onOpenChange, draft, onChange, students, er
                 })}
                 {!matches.length && <p className="empty-message">검색한 학생이 없어요.</p>}
               </div>
-              {!ids.length && <p>고정 학생이 없으면 이 동아리는 0명으로 유지돼요.</p>}
+              {!ids.length && <p>고정 학생이 없으면 전체 정원을 지망별로 배정해요.</p>}
             </details>}
           </section>;
         })}

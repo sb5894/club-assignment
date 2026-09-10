@@ -68,7 +68,7 @@ export function allocate(students: Student[], clubs: Club[], seed: string): Resu
     for(const id of club.fixedStudentIds ?? []) placements[id]={club:club.id,rank:0,reason:'명단 고정',assignmentType:'fixed'};
   }
   const rounds: Round[]=[];
-  for(let rank=1;rank<=3;rank++) for(const club of clubs.filter(c=>c.allocationMode!=='fixed').sort((a,b)=>a.id.localeCompare(b.id))) {
+  for(let rank=1;rank<=3;rank++) for(const club of [...clubs].sort((a,b)=>a.id.localeCompare(b.id))) {
     const occupied=Object.values(placements).filter(p=>p.club===club.id).length, seats=club.max-occupied;
     const candidates=students.filter(s=>!placements[s.id].club&&s.choices[rank-1]===club.id).map(s=>s.id).sort();
     const ordered=[...candidates], rng=random(`${seed}|${rank}|${club.id}`);
@@ -84,7 +84,7 @@ export function moveStudent(result:Result, students:Student[], clubs:Club[], id:
   if(!reason.trim()) throw new Error('조정 사유를 입력해 주세요.');
   const club=clubs.find(c=>c.id===destination); if(!club) throw new Error('동아리를 선택해 주세요.');
   const previous=result.placements[id];
-  if(previous.assignmentType==='fixed'||clubs.some(c=>c.id===previous.club&&c.allocationMode==='fixed')||club.allocationMode==='fixed') throw new Error('명단 고정 동아리의 학생은 이동할 수 없습니다. 설정에서 고정 명단을 수정한 뒤 다시 배정해 주세요.');
+  if(previous.assignmentType==='fixed'||clubs.some(c=>c.allocationMode==='fixed'&&c.fixedStudentIds?.includes(id))) throw new Error('고정 명단에 지정된 학생은 이동할 수 없습니다. 고정하지 않은 학생만 배정을 조정할 수 있어요.');
   if(previous.club===destination) throw new Error('현재 배정과 같은 동아리입니다.');
   if(Object.values(result.placements).filter(p=>p.club===destination).length>=club.max) throw new Error('선택한 동아리의 정원이 찼습니다.');
   return {...result,placements:{...result.placements,[id]:{club:destination,rank:0,reason:reason.trim(),assignmentType:'manual'}}};

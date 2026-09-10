@@ -52,7 +52,7 @@ export function ClubDetail({ club, clubs, students, result, open, onOpenChange }
         <DialogTitle>{club?.name ?? '동아리'} 명단</DialogTitle>
         <DialogDescription>
           최소 {club?.min ?? 0}명 / 최대 {club?.max ?? 0}명
-          {club?.allocationMode === 'fixed' && ' · 추첨 제외 · 명단 고정'}
+          {club?.allocationMode === 'fixed' && ' · 고정 학생 선배정 후 남은 정원은 지망별 배정'}
         </DialogDescription>
         {club && (
           <Tabs value={activeTab} onValueChange={value => setSelection({ ...context, value: String(value) })} className="club-detail-tabs min-w-0 gap-4">
