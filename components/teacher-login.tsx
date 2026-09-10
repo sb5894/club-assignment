@@ -41,7 +41,7 @@ export function TeacherLogin() {
   }
 
   return <main className="portal-login">
-    <Link className="brand" href="/"><span className="brand-mark"><LayoutGrid size={23}/></span><span>안성초 5~6 동아리 신청<small>신청과 배정</small></span></Link>
+    <Link className="brand" href="/"><span className="brand-mark"><LayoutGrid size={23}/></span><span>안성초 5·6학년 동아리 신청<small>신청과 배정</small></span></Link>
     <form className="panel application-form" onSubmit={submit}>
       <span className="eyebrow">선생님 전용</span>
       <h1>선생님 로그인</h1>
