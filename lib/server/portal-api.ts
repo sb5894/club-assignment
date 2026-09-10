@@ -1,4 +1,4 @@
-import { assertSameOrigin, AuthError, generateStudentCode, hashSecret, loginStudent, loginTeacher, logout, normalizeStudentCode, requireSession, type PortalEnv } from './auth.ts';
+import { assertSameOrigin, AuthError, createStudentCodeIssuer, loginStudent, loginTeacher, logout, requireSession, type PortalEnv } from './auth.ts';
 import { adjustPlacement, changePhase, finalize, getAudit, getHistory, getStudentState, getTeacherState, importStudents, resetStudentCode, runAllocation, StoreError, submitApplication, updateClubs, verifyApplication } from './store.ts';
 import type { Club } from '../allocation.ts';
 import type { IssuedCode, RosterInput } from '../portal-types.ts';
@@ -121,13 +121,14 @@ export async function handlePortalRequest(request: Request, env: PortalEnv): Pro
           if (!Array.isArray(body.rows) || !body.rows.length || body.rows.length > 500) throw new AuthError('한 번에 1~500명의 학생을 등록해 주세요.', 400);
           const codes: IssuedCode[] = [];
           const rows: (RosterInput & { codeHash: string })[] = [];
+          const issueCode = await createStudentCodeIssuer(env.DB);
           for (const value of body.rows) {
             if (!value || typeof value !== 'object' || Array.isArray(value)) throw new AuthError('학생 명단을 확인해 주세요.', 400);
             const row = value as Record<string, unknown>;
             allowed(row, ['grade', 'classNo', 'number', 'name', 'gender']);
             const student = { grade: integer(row, 'grade'), classNo: integer(row, 'classNo'), number: integer(row, 'number'), name: textField(row, 'name', 80).trim(), gender: textField(row, 'gender', 20) };
-            const code = generateStudentCode();
-            rows.push({ ...student, codeHash: await hashSecret(normalizeStudentCode(code)) });
+            const { code, codeHash } = await issueCode();
+            rows.push({ ...student, codeHash });
             codes.push({ id: `${student.grade}-${student.classNo}-${student.number}`, name: student.name, code });
           }
           await importStudents(env.DB, rows, revision, actor);
@@ -153,8 +154,9 @@ export async function handlePortalRequest(request: Request, env: PortalEnv): Pro
         case 'reset-code': {
           allowed(body, ['action', 'studentId', 'revision']);
           const id = textField(body, 'studentId', 12);
-          const code = generateStudentCode();
-          const state = await resetStudentCode(env.DB, id, await hashSecret(normalizeStudentCode(code)), revision, actor);
+          const issueCode = await createStudentCodeIssuer(env.DB);
+          const { code, codeHash } = await issueCode();
+          const state = await resetStudentCode(env.DB, id, codeHash, revision, actor);
           return json({ state, codes: [{ id, name: state.students.find(student => student.id === id)!.name, code }] });
         }
         default: throw new AuthError('지원하지 않는 작업이에요.', 400);

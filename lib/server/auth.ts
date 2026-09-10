@@ -45,14 +45,31 @@ export function normalizeStudentCode(value: string) {
 
 export function generateStudentCode() {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  // Rejection sampling avoids modulo bias. Sixteen symbols contain 80 bits of entropy.
+  // Four symbols give 1,048,576 possibilities; issuance checks uniqueness below.
   let result = '';
-  while (result.length < 16) {
-    for (const value of crypto.getRandomValues(new Uint8Array(24))) {
-      if (value < Math.floor(256 / alphabet.length) * alphabet.length && result.length < 16) result += alphabet[value % alphabet.length];
+  while (result.length < 4) {
+    for (const value of crypto.getRandomValues(new Uint8Array(4))) {
+      if (value < Math.floor(256 / alphabet.length) * alphabet.length && result.length < 4) result += alphabet[value % alphabet.length];
     }
   }
-  return result.match(/.{4}/g)!.join('-');
+  return result;
+}
+
+export async function createStudentCodeIssuer(db: D1Database, generate = generateStudentCode) {
+  const { results } = await db.prepare('SELECT code_hash FROM students').all<{ code_hash: string }>();
+  const used = new Set(results.map(row => row.code_hash));
+  return async () => {
+    // Include codes issued earlier in this import and the old code during reset.
+    // The database UNIQUE constraint also protects concurrent requests.
+    for (let attempt = 0; attempt < 128; attempt++) {
+      const code = generate();
+      const codeHash = await hashSecret(normalizeStudentCode(code));
+      if (used.has(codeHash)) continue;
+      used.add(codeHash);
+      return { code, codeHash };
+    }
+    throw new AuthError('새 코드를 만들지 못했어요. 잠시 후 다시 시도해 주세요.', 503);
+  };
 }
 
 export function assertSameOrigin(request: Request) {
@@ -121,7 +138,8 @@ export async function loginStudent(request: Request, env: PortalEnv, studentId: 
   const normalized = normalizeStudentCode(code);
   const codeHash = await hashSecret(normalized);
   const student = await env.DB.prepare('SELECT id, code_hash, code_version FROM students WHERE id = ?').bind(studentId).first<{ id: string; code_hash: string; code_version: number }>();
-  if (!/^[A-HJ-NP-Z2-9]{16}$/.test(normalized) || !student || student.code_hash !== codeHash) {
+  // Keep previously distributed sixteen-character codes valid until reissued.
+  if (!/^(?:[A-HJ-NP-Z2-9]{4}|[A-HJ-NP-Z2-9]{16})$/.test(normalized) || !student || student.code_hash !== codeHash) {
     throw new AuthError('학년·반·번호 또는 신청 코드가 맞지 않아요.');
   }
   return issueSession(request, env, 'student', student.id, String(student.code_version));
