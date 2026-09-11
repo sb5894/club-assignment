@@ -2,11 +2,12 @@ import type { Club } from './allocation';
 
 export type StudentLanguage = 'ko' | 'ru';
 
-// Summarized from the school's 2026 second-semester club presentation.
+// Summarized from the school's 2026 second-semester club presentation;
+// source overrides identify newer club materials supplied by the user.
 // Keep this student-only copy separate from allocation and teacher settings.
 export const studentClubs: Record<
   string,
-  { name: string; ko: string; ru: string; slides: number[] }
+  { name: string; ko: string; ru: string; slides: number[]; source?: string }
 > = {
   badminton: {
     name: 'Бадминтон',
@@ -51,10 +52,11 @@ export const studentClubs: Record<
     slides: [20, 21],
   },
   media: {
-    name: 'Снимаем видео',
-    ko: '가짜 뉴스를 알아보는 법을 배우고 우리 동네 이야기를 영상으로 찍고 편집해요.',
-    ru: 'Учимся отличать ложные новости от правдивых, снимаем и собираем видео о нашем районе.',
-    slides: [18, 19],
+    name: 'Снимаем короткие видео',
+    ko: '학교 이야기를 취재해 짧은 영상을 만들고 학교 채널에 올린 뒤, 사람들의 반응을 살펴봐요.',
+    ru: 'Собираем истории о школе, делаем короткие видео, публикуем их на школьном канале и смотрим, как реагируют зрители.',
+    slides: [],
+    source: '2026-09-11 사용자 제공 이미지: 미디어온(ON) 취재 쇼츠 연구소',
   },
   dodgeball: {
     name: 'Вышибалы',
