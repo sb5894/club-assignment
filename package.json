@@ -11,7 +11,7 @@
     "start": "wrangler dev --config dist/server/wrangler.json",
     "lint": "oxlint",
     "format": "oxfmt",
-    "test": "node --experimental-strip-types --test lib/allocation.test.mjs lib/allocation.simulation.test.mjs lib/portal-security.test.mjs lib/portal-store.test.mjs",
+    "test": "node --experimental-strip-types --test lib/allocation.test.mjs lib/allocation.simulation.test.mjs lib/portal-security.test.mjs lib/portal-store.test.mjs lib/student-i18n.test.mjs",
     "db:generate": "drizzle-kit generate --config drizzle.config.ts",
     "db:migrate:local": "wrangler d1 migrations apply DB --local"
   },

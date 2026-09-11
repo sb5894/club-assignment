@@ -256,3 +256,35 @@ textarea{min-height:90px;resize:vertical}
 @media(max-width:850px){.topbar{padding:0 24px}.dashboard-grid{grid-template-columns:1fr}.right-column{display:grid;grid-template-columns:1.2fr 1fr;align-items:start}.allocation-card{grid-row:span 2}.steps{display:flex;gap:16px;margin:24px 0}.steps li{display:block;padding:0;flex:1}.steps li:after{display:none}.steps li>span{margin-bottom:10px}.steps b{font-size:12px}.steps small{font-size:11px}.metrics{grid-template-columns:repeat(2,1fr)}.metrics strong{font-size:32px}.metrics p{font-size:12px}.student-grid{grid-template-columns:1fr}.choice-cards{grid-template-columns:repeat(3,1fr)}.application-form{position:static;max-width:600px;width:100%;margin:auto}.student-heading h1{font-size:30px}.main-nav [data-slot=tabs-trigger]{padding:9px 16px}.demo-note{font-size:12px}.roster-panel .panel-heading{align-items:flex-start}.export-buttons{flex-wrap:wrap;justify-content:flex-end}}
 @media(max-width:600px){.topbar{height:auto;min-height:112px;padding:16px 18px;flex-wrap:wrap;gap:14px}.brand{font-size:18px}.brand-mark{width:37px;height:37px}.main-nav[data-slot=tabs-list]{order:3;width:100%;height:44px}.demo-note{padding:10px 18px;display:block;text-align:center;font-size:11px;line-height:1.8}.demo-note>span{margin-right:8px}.workspace,.student-workspace{padding:22px 16px 30px}.page-heading{align-items:flex-start;flex-direction:column;gap:16px}.page-heading h1{font-size:28px;gap:12px}.page-heading p{font-size:14px}.eyebrow{font-size:12px}.page-heading>.secondary{align-self:flex-end;margin-top:-2px}.metrics{gap:10px;margin-bottom:18px}.metrics>div{padding:15px}.metrics>div>span{font-size:12px}.metrics strong{font-size:30px}.metrics p{font-size:11px}.rank-sequence{font-size:23px!important}.metrics strong small{font-size:13px}.metrics svg{width:15px}.right-column{display:flex}.allocation-card{padding:25px}.steps li{display:flex;gap:10px}.steps li>span{margin:0}.steps small{display:none}.steps b{font-size:12px}.panel-heading{padding:19px 16px;gap:10px}.panel-heading p{font-size:12px}.panel-heading h2{font-size:17px}.panel-heading [data-slot=button]{font-size:12px;padding:8px 10px}.club-table{padding:0 14px}.club-table-head,.club-row{grid-template-columns:minmax(140px,1.25fr) minmax(68px,.65fr) 65px;gap:8px}.club-table-head{font-size:10px}.club-index{width:30px;height:32px;border-radius:8px;font-size:11px}.club-label{font-size:13px;gap:8px}.club-label small{font-size:11px}.capacity{font-size:12px;gap:5px}.capacity>span:last-child{min-width:44px}.capacity-track{min-width:12px}.chip{font-size:10px;padding:4px}.panel-foot{padding:13px 16px;font-size:11px}.roster-panel .panel-heading{flex-direction:column;gap:15px}.export-buttons{justify-content:flex-start}.roster-tools{padding:0 16px 15px;flex-wrap:wrap}.roster-tools>.picker{width:100%;max-width:330px}.roster-scroll td{font-size:12px;padding:12px}.roster-scroll th:first-child,.roster-scroll td:first-child{padding-left:16px}.student-heading h1{font-size:27px}.student-heading p{font-size:14px}.choice-cards{grid-template-columns:repeat(2,1fr);gap:11px}.choice-card{padding:18px 15px;min-height:150px}.choice-card.selected{padding:17px 14px}.choice-card h2{font-size:17px}.choice-meta{font-size:11px}.choice-rank{font-size:10px}.choice-top .club-index{width:33px;height:33px}.application-form{padding:24px}.footer{width:calc(100% - 32px);padding:23px 0;font-size:11px}.footer>span:nth-child(2){display:none}.settings-list>div{grid-template-columns:minmax(100px,1fr) 82px 82px;gap:8px}.settings-list b{font-size:13px}.settings-list input{width:50px;padding:6px}.distribution{gap:5px}.distribution>div{padding:10px 5px}.distribution b{font-size:16px}.detail-roster>div{grid-template-columns:65px 1fr 25px 66px;font-size:12px;gap:7px}.receipt{padding:30px 22px}.receipt h2{font-size:24px}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
+
+/* Student language controls and readable bilingual club names. */
+.student-portal .topbar{height:auto;min-height:88px;gap:20px;padding-top:16px;padding-bottom:16px}
+.student-portal .brand{min-width:0;max-width:100%;flex-shrink:1}
+.student-portal .brand-mark{flex-shrink:0}
+.student-portal .brand>span:last-child{min-width:0;overflow-wrap:anywhere}
+.student-header-actions{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:12px;margin-left:auto;flex-shrink:0}
+.student-language-toggle{display:flex;gap:3px;padding:4px;background:#edf1fc;border:1px solid #d7dfef;border-radius:12px}
+.student-language-toggle button{min-height:40px;padding:8px 13px;border-radius:8px;font-size:14px;font-weight:650;color:#455775;cursor:pointer}
+.student-language-toggle button[aria-pressed=true]{background:#3458df;color:#fff;box-shadow:0 2px 5px #23366d20}
+.student-language-toggle button:focus-visible,.student-portal .choice-card:focus-visible{outline:3px solid #3458df;outline-offset:3px}
+.student-portal .choice-card{display:flex;flex-direction:column;min-width:0}
+.student-portal .choice-top{width:100%}
+.student-portal .choice-card h2{word-break:keep-all;overflow-wrap:anywhere}
+.student-portal .club-description{font-size:14px;line-height:1.65;color:#53627b;margin:0 0 18px;word-break:normal;overflow-wrap:anywhere}
+.student-portal .choice-meta{margin-top:auto;width:100%;flex-wrap:wrap}
+.student-portal .saved-choices strong{word-break:keep-all;overflow-wrap:anywhere}
+.student-portal .student-grid>*,.student-portal .student-preference{min-width:0}
+.student-portal .picker[data-slot=select-trigger]{white-space:normal;text-align:left}
+.student-portal [data-slot=select-value]{display:block;min-width:0;-webkit-line-clamp:unset;overflow:visible;white-space:normal;word-break:keep-all;overflow-wrap:anywhere}
+.student-club-options [data-slot=select-item]>span{white-space:normal;overflow-wrap:anywhere;min-width:0;flex-shrink:1}
+.student-portal [data-slot=button],.student-confirm-dialog [data-slot=button]{white-space:normal;height:auto;overflow-wrap:anywhere}
+.student-confirm-dialog{max-height:calc(100dvh - 32px);overflow-y:auto}
+.student-portal[lang=ru] .identity-fields label{display:flex;flex-direction:column;justify-content:space-between}
+@media(max-width:600px){
+  .student-portal .topbar{flex-wrap:wrap;gap:14px}
+  .student-header-actions{width:100%;gap:10px}
+  .student-portal[lang=ru] .choice-cards{grid-template-columns:1fr}
+  .student-portal[lang=ru] .identity-fields{grid-template-columns:1fr}
+  .student-portal[lang=ru] .saved-choices>div{align-items:flex-start;flex-direction:column;gap:6px}
+  .student-portal[lang=ru] .verification-badge{white-space:normal}
+}
