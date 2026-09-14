@@ -1,4 +1,4 @@
-import { CLUBS, allocateNext, completedRank, applyFixedRoster, moveStudent, validate, type Club, type Result } from '../allocation.ts';
+import { CLUBS, allocateNext, allocateClub, completedRank, applyFixedRoster, moveStudent, validate, type Club, type Result } from '../allocation.ts';
 import type { ApplicationRevision, Phase, PortalState, RosterInput, RosterStudent, StudentState } from '../portal-types.ts';
 import { StoreError, type SchoolRow, type StudentRow, type AuditEntry } from './store-types.ts';
 export { StoreError } from './store-types.ts';
@@ -121,6 +121,16 @@ export async function runAllocation(db:D1Database,seed:string,expectedRevision:n
   let result:Result;try { result=allocateNext(state.students.filter(s=>s.applicationVersion>0||fixed.has(s.id)),state.clubs,seed,state.result); } catch(error) {throw new StoreError((error as Error).message);}
   for(const student of state.students) if(!result.placements[student.id]) result.placements[student.id]={club:null,rank:null,reason:'신청 미제출'};
   await mutate(db,{revision:expectedRevision,phases:[state.phase],action:'allocation.run',actor,payload:{seed,rank,clubs:state.clubs,students:state.students,result},phase:'allocated',result});return getTeacherState(db);
+}
+export async function runClubAllocation(db:D1Database,clubId:string,rank:number,seats:number,expectedRevision:number,actor:string):Promise<PortalState> {
+  const state=await getTeacherState(db);requirePhase(state,['allocated']);requireRevision(state,expectedRevision);
+  if(!state.result) throw new StoreError('먼저 1지망 배정을 진행해 주세요.',409);
+  const fixed=new Set(state.clubs.filter(c=>c.allocationMode==='fixed').flatMap(c=>c.fixedStudentIds??[]));
+  let result:Result;
+  try { result=allocateClub(state.students.filter(s=>s.applicationVersion>0||fixed.has(s.id)),state.clubs,state.result,rank,clubId,seats); }
+  catch(error) { throw new StoreError((error as Error).message,409); }
+  await mutate(db,{revision:expectedRevision,phases:['allocated'],action:'allocation.club',actor,payload:{clubId,rank,seats,seed:result.seed,round:result.rounds.at(-1)},result});
+  return getTeacherState(db);
 }
 export async function adjustPlacement(db:D1Database,id:string,destination:string,reason:string,expectedRevision:number,actor:string):Promise<PortalState> {
   const state=await getTeacherState(db);requirePhase(state,['allocated']);requireRevision(state,expectedRevision);

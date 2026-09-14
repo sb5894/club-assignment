@@ -73,6 +73,7 @@ export function allocateNext(students: Student[], clubs: Club[], seed: string, p
   if(!seed.trim()) throw new Error('추첨 번호를 입력해 주세요.');
   const rank = completedRank(previous) + 1;
   if(rank > 3) throw new Error('3지망 배정까지 이미 완료했어요.');
+  if(previous?.rounds.some(round=>round.rank===rank)) throw new Error('이미 동아리별 배정을 시작했어요. 남은 동아리를 각각 배정해 주세요.');
   if(previous && previous.seed !== seed) throw new Error('처음 배정할 때 사용한 추첨 번호를 유지해 주세요.');
   const placements: Record<string,Placement> = previous ? {...previous.placements} : Object.fromEntries(students.map(s=>[s.id,{club:null,rank:null}]));
   if(!previous) for(const club of clubs.filter(c=>c.allocationMode==='fixed')) {
@@ -81,14 +82,34 @@ export function allocateNext(students: Student[], clubs: Club[], seed: string, p
   const rounds: Round[]=[...(previous?.rounds ?? [])];
   for(const club of [...clubs].sort((a,b)=>a.id.localeCompare(b.id))) {
     const occupied=Object.values(placements).filter(p=>p.club===club.id).length, seats=club.max-occupied;
-    const candidates=students.filter(s=>!placements[s.id].club&&s.choices[rank-1]===club.id).map(s=>s.id).sort();
-    const ordered=[...candidates], rng=random(`${seed}|${rank}|${club.id}`);
-    for(let i=ordered.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[ordered[i],ordered[j]]=[ordered[j],ordered[i]];}
-    const winners=ordered.slice(0,Math.max(0,seats));
-    for(const id of winners) placements[id]={club:club.id,rank};
-    rounds.push({rank,club:club.id,candidates,winners,seats});
+    const round=drawRound(students,placements,seed,rank,club.id,seats);
+    for(const id of round.winners) placements[id]={club:club.id,rank};
+    rounds.push(round);
   }
   return {seed,placements,rounds,completedRank:rank};
+}
+function drawRound(students: Student[], placements: Record<string,Placement>, seed: string, rank: number, club: string, seats: number): Round {
+  const candidates=students.filter(s=>!placements[s.id]?.club&&s.choices[rank-1]===club).map(s=>s.id).sort();
+  const ordered=[...candidates], rng=random(`${seed}|${rank}|${club}`);
+  for(let i=ordered.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[ordered[i],ordered[j]]=[ordered[j],ordered[i]];}
+  return {rank,club,candidates,winners:ordered.slice(0,Math.max(0,seats)),seats};
+}
+export function clubRoundDone(result: Result, rank: number, clubId: string): boolean {
+  return completedRank(result)>=rank || result.rounds.some(round=>round.rank===rank&&round.club===clubId);
+}
+export function allocateClub(students: Student[], clubs: Club[], previous: Result, rank: number, clubId: string, seats: number): Result {
+  const errors=validate(students,clubs); if(errors.length) throw new Error(errors[0]);
+  if((rank!==2&&rank!==3)||rank!==completedRank(previous)+1) throw new Error('모든 동아리의 이전 지망 배정을 마친 뒤 진행해 주세요.');
+  const club=clubs.find(c=>c.id===clubId); if(!club) throw new Error('동아리를 찾을 수 없어요.');
+  if(clubRoundDone(previous,rank,clubId)) throw new Error('이 동아리의 해당 지망은 이미 처리했어요.');
+  const remaining=club.max-Object.values(previous.placements).filter(p=>p.club===clubId).length;
+  if(!Number.isInteger(seats)||seats<0||seats>remaining) throw new Error(`배정 인원은 0명부터 남은 정원 ${remaining}명 사이의 정수로 입력해 주세요.`);
+  const round=drawRound(students,previous.placements,previous.seed,rank,clubId,seats);
+  const placements={...previous.placements};
+  for(const id of round.winners) placements[id]={club:clubId,rank};
+  const rounds=[...previous.rounds,round];
+  const finished=clubs.every(c=>rounds.some(r=>r.rank===rank&&r.club===c.id));
+  return {...previous,placements,rounds,completedRank:finished?rank:completedRank(previous)};
 }
 export function applyFixedRoster(result: Result, before: Club[], after: Club[]): Result {
   const fixedMap = (clubs: Club[]) => new Map(clubs.filter(c=>c.allocationMode==='fixed').flatMap(c=>(c.fixedStudentIds??[]).map(id=>[id,c.id] as const)));

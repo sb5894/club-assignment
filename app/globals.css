@@ -176,6 +176,20 @@ textarea{min-height:90px;resize:vertical}
 .club-detail-dialog[data-slot=dialog-content]{max-width:1050px;width:calc(100% - 32px)}
 .club-settings-dialog[data-slot=dialog-content]{max-width:880px;width:calc(100% - 32px)}
 .club-settings-list{max-height:56dvh;overflow:auto;padding-right:6px}
+.club-round-panel{margin:24px 0;scroll-margin-top:20px}
+.club-round-help{padding:0 22px 18px;color:var(--muted-foreground);font-size:13px;line-height:1.7}
+.club-round-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:16px;padding:0 20px 22px}
+.club-round-card{border:1px solid var(--border);border-radius:12px;padding:16px;min-width:0}
+.club-round-card h3{font-weight:650;font-size:17px}
+.club-round-card p{font-size:13px;line-height:1.6;margin:6px 0;color:var(--muted-foreground)}
+.club-round-step{border-top:1px solid var(--border);margin-top:12px;padding-top:12px}
+.club-round-step-heading{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px}
+.club-round-step-heading span{font-size:12px;color:var(--muted-foreground)}
+.club-round-step small{display:block;font-size:11px}
+.club-round-input{display:flex;align-items:center;gap:8px;font-size:13px;margin:12px 0}
+.club-round-input input{width:85px;border:1px solid var(--border);border-radius:6px;padding:7px;background:var(--background)}
+.club-round-actions{display:flex;flex-wrap:wrap;gap:6px}
+.club-round-actions button{font-size:12px}
 .club-setting{padding:16px 0;border-bottom:1px solid var(--border)}
 .club-setting-fields{display:grid;grid-template-columns:minmax(130px,1fr) 88px 88px 210px;gap:14px;align-items:center}
 .club-setting-fields h3{font-weight:650;font-size:16px;margin:0}

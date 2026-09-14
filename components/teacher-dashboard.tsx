@@ -9,6 +9,7 @@ import { AlertDialog, AlertDialogContent, AlertDialogTitle, AlertDialogDescripti
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { ClubSettings } from '@/components/club-settings';
 import { ClubDetail } from '@/components/club-detail';
+import { ClubRoundAllocation } from '@/components/club-round-allocation';
 import { completedRank } from '@/lib/allocation';
 import type { Club, Placement } from '@/lib/allocation';
 import type { PortalState, RosterInput, RosterStudent, IssuedCode, ApplicationRevision } from '@/lib/portal-types';
@@ -18,6 +19,7 @@ type Action =
   | { action: 'settings'; clubs: Club[] }
   | { action: 'phase'; phase: 'open' | 'closed' }
   | { action: 'allocate'; seed: string; rank: number }
+  | { action: 'allocate-club'; clubId: string; rank: number; seats: number }
   | { action: 'adjust'; studentId: string; destination: string; reason: string }
   | { action: 'finalize' }
   | { action: 'reset-code'; studentId: string };
@@ -119,6 +121,7 @@ export function TeacherDashboard({ initialState }: { initialState: PortalState }
   const canConfigure = !locked;
   const finishedRank = completedRank(result);
   const nextRank = finishedRank + 1;
+  const partialRank = result?.rounds.some(round=>round.rank===nextRank) ?? false;
   const clubName = (id: string | null | undefined) => clubs.find(club => club.id === id)?.name ?? (id ? '알 수 없는 동아리' : '미배정');
   const fixedIds = useMemo(() => new Set(clubs.filter(club => club.allocationMode === 'fixed').flatMap(club => club.fixedStudentIds ?? [])), [clubs]);
   const stats = useMemo(() => clubs.map(club => ({
@@ -290,18 +293,20 @@ export function TeacherDashboard({ initialState }: { initialState: PortalState }
           })}</div><p className="panel-foot">고정 학생을 먼저 배정하고 모든 동아리의 남은 정원을 지망별로 배정해요. 신청 인원에는 고정 학생도 포함돼요.</p>
         </section>
         <aside className="right-column">
-          <section className="allocation-card"><span className="section-number">ALLOCATION</span><h2>{locked ? '최종 확정했어요' : result ? `${finishedRank}지망 결과를 검토해 주세요` : phase === 'open' ? '학생 신청을 받고 있어요' : phase === 'closed' ? '마감한 신청을 배정해요' : '명단과 설정을 준비해요'}</h2>
+          <section className="allocation-card"><span className="section-number">ALLOCATION</span><h2>{locked ? '최종 확정했어요' : result ? partialRank ? `${nextRank}지망 동아리별 배정 중` : `${finishedRank}지망 결과를 검토해 주세요` : phase === 'open' ? '학생 신청을 받고 있어요' : phase === 'closed' ? '마감한 신청을 배정해요' : '명단과 설정을 준비해요'}</h2>
             <p>{result ? `배정 ${placed}명 · 미배정 ${waiting}명` : `신청 ${submitted}명 · 명단 고정 ${fixedIds.size}명`}</p>
             {!result && <p>고정 명단을 먼저 배정하고, 나머지 신청자는 1지망부터 정원 초과 시 동일 확률로 추첨해요.</p>}
             {phase === 'setup' && <Button className="run-button" disabled={busy || !students.length} onClick={() => perform({ action: 'phase', phase: 'open' }, '학생 신청 접수를 시작했어요. 학생들에게 신청 주소와 개인 코드를 안내해 주세요.')}>학생 신청 접수 시작<ArrowRight size={17}/></Button>}
             {phase === 'open' && <Button className="run-button" disabled={busy} onClick={() => setConfirmation('close')}><LockKeyhole size={17}/>신청 마감</Button>}
             {phase === 'closed' && <><label className="seed-label" htmlFor="teacher-seed">추첨 번호</label><input id="teacher-seed" value={seed} onChange={event => setSeed(event.target.value)} maxLength={80} disabled={busy}/><small className="seed-help">같은 입력 자료와 번호는 같은 추첨 결과를 만들어요.</small><Button className="run-button" disabled={busy || !seed.trim() || (!submitted && !fixedIds.size)} onClick={() => setConfirmation('allocate')}><Shuffle size={17}/>1지망 배정 실행</Button><Button className="audit-button" variant="ghost" disabled={busy} onClick={() => perform({ action: 'phase', phase: 'open' }, '신청 접수를 다시 열었어요. 학생이 지망을 다시 제출할 수 있어요.')}>신청 다시 열기</Button></>}
-            {result && <><ol className="steps">{[1, 2, 3].map(rank => <li key={rank}><span className={rank <= finishedRank ? 'checked' : ''}>{rank <= finishedRank ? <Check size={14}/> : rank}</span><div><b>{rank}지망 {rank <= finishedRank ? '배정 완료' : '대기'}</b><small>{rank <= finishedRank ? `${Object.values(result.placements).filter(placement => placement.rank === rank).length}명 배정` : '아직 실행하지 않았어요'}</small></div></li>)}</ol>{!locked && <p>학생별 ‘배정 조정’ 또는 ‘고정 명단 수정’으로 결과를 조정할 수 있어요. 기존 배정은 다음 지망에서도 유지돼요.</p>}{finishedRank < 3 && <Button className="run-button" disabled={busy || locked} onClick={() => setConfirmation('allocate')}><Shuffle size={17}/>검토 완료 · {nextRank}지망 배정 실행</Button>}<Button className="run-button" disabled={busy || locked || finishedRank < 3} onClick={() => setConfirmation('finalize')}><LockKeyhole size={17}/>{locked ? '최종 확정 완료' : '검토 후 최종 확정'}</Button></>}
+            {result && <><ol className="steps">{[1, 2, 3].map(rank => <li key={rank}><span className={rank <= finishedRank ? 'checked' : ''}>{rank <= finishedRank ? <Check size={14}/> : rank}</span><div><b>{rank}지망 {rank <= finishedRank ? '배정 완료' : '대기'}</b><small>{rank <= finishedRank ? `${Object.values(result.placements).filter(placement => placement.rank === rank).length}명 배정` : `${result.rounds.filter(round=>round.rank===rank).length} / ${clubs.length}개 처리`}</small></div></li>)}</ol>{!locked && <p>학생별 ‘배정 조정’ 또는 ‘고정 명단 수정’으로 결과를 조정할 수 있어요. 기존 배정은 다음 지망에서도 유지돼요.</p>}{finishedRank < 3 && <Button className="run-button" disabled={busy || locked} onClick={() => document.getElementById('club-round-allocation')?.scrollIntoView({ behavior: 'smooth' })}><Shuffle size={17}/>{nextRank}지망 동아리별 배정하기</Button>}<Button className="run-button" disabled={busy || locked || finishedRank < 3} onClick={() => setConfirmation('finalize')}><LockKeyhole size={17}/>{locked ? '최종 확정 완료' : '검토 후 최종 확정'}</Button></>}
             <Button className="audit-button" variant="ghost" disabled={busy} onClick={exportAudit}><Download size={16}/>운영·추첨 기록 저장</Button>
           </section>
           <section className="panel review-panel"><h2>선생님 확인 사항</h2><button className="review-item" onClick={() => { setFilter(result ? 'waiting' : 'unsubmitted'); document.getElementById('teacher-roster')?.scrollIntoView({ behavior: 'smooth' }); }}><span>{result ? '미배정 학생' : '미신청 학생'}</span><b>{result ? waiting : students.length - submitted}명 <ArrowRight size={14}/></b></button><button className="review-item" onClick={() => { setFilter('unverified'); document.getElementById('teacher-roster')?.scrollIntoView({ behavior: 'smooth' }); }}><span>제출 후 미확인</span><b>{submitted - verifiedCount}명 <ArrowRight size={14}/></b></button>{result && <><div className="review-item"><span>최소 인원 미달</span><b>{shortage.length}개</b></div>{shortage.length > 0 && <p className="shortage-list">{shortage.map(club => `${club.name} ${club.count}/${club.min}명`).join(' · ')}</p>}</>}<p>학생이 지망을 다시 제출하면 이전 확인은 초기화돼요. 새로고침으로 최신 현황을 확인해 주세요.</p><p>개인 코드는 각 학생에게 개별 전달하고, 분실한 경우 해당 학생 행에서 재발급해요.</p></section>
         </aside>
       </div>
+
+      {result && <ClubRoundAllocation state={state} busy={busy} onExecute={({clubId,rank,seats,revision})=>perform({action:'allocate-club',clubId,rank,seats},`${clubName(clubId)} ${rank}지망을 ${seats===0?'0명으로 건너뛰었어요':'처리했어요. 배정 결과를 확인해 주세요'}`,revision)}/>}
 
       <section className="panel roster-panel" id="teacher-roster"><div className="panel-heading"><div><h2>학생별 신청·배정 <span className="count-label">{matches.length}명</span></h2><p>신청 이력에서 이전 지망과 제출 시각을 확인할 수 있어요.</p></div><div className="export-buttons">{result && <Button variant="outline" onClick={() => exportRoster(true)}><Download size={16}/>미배정자 CSV</Button>}<Button variant="outline" onClick={() => exportRoster()}><Download size={16}/>전체 CSV</Button></div></div>
         <div className="roster-tools"><div className="search-field"><Search size={17}/><input aria-label="학생 검색" placeholder="이름 또는 학년-반-번호 검색" value={query} onChange={event => setQuery(event.target.value)}/></div><select className="picker" aria-label="학생 상태 필터" value={filter} onChange={event => setFilter(event.target.value)}><option value="all">전체 학생</option><option value="unsubmitted">미신청 학생</option><option value="unverified">제출 후 미확인</option>{result && <><option value="waiting">미배정 학생</option>{clubs.map(club => <option key={club.id} value={club.id}>{club.name}</option>)}</>}</select></div>
