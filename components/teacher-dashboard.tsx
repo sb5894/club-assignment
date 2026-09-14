@@ -9,6 +9,7 @@ import { AlertDialog, AlertDialogContent, AlertDialogTitle, AlertDialogDescripti
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { ClubSettings } from '@/components/club-settings';
 import { ClubDetail } from '@/components/club-detail';
+import { FirstRankExclusions } from '@/components/first-rank-exclusions';
 import { ClubRoundAllocation } from '@/components/club-round-allocation';
 import { completedRank } from '@/lib/allocation';
 import type { Club, Placement } from '@/lib/allocation';
@@ -19,6 +20,7 @@ type Action =
   | { action: 'settings'; clubs: Club[] }
   | { action: 'phase'; phase: 'open' | 'closed' }
   | { action: 'allocate'; seed: string; rank: number }
+  | { action: 'first-rank-exclusions'; clubId: string; studentIds: string[] }
   | { action: 'allocate-club'; clubId: string; rank: number; seats: number }
   | { action: 'adjust'; studentId: string; destination: string; reason: string }
   | { action: 'finalize' }
@@ -128,7 +130,7 @@ export function TeacherDashboard({ initialState }: { initialState: PortalState }
     ...club,
     reserved: club.allocationMode === 'fixed' ? club.fixedStudentIds?.length ?? 0 : 0,
     first: students.filter(student => student.choices[0] === club.id).length,
-    eligibleFirst: students.filter(student => student.choices[0] === club.id && !fixedIds.has(student.id)).length,
+    eligibleFirst: students.filter(student => student.choices[0] === club.id && !fixedIds.has(student.id) && !club.firstRankExcludedStudentIds?.includes(student.id)).length,
     count: students.filter(student => result?.placements[student.id]?.club === club.id).length,
   })), [clubs, students, result, fixedIds]);
   const submitted = students.filter(student => student.applicationVersion > 0).length;
@@ -284,7 +286,7 @@ export function TeacherDashboard({ initialState }: { initialState: PortalState }
       </section>}
 
       <div className="dashboard-grid">
-        <section className="panel club-panel"><div className="panel-heading"><div><h2>동아리별 {result ? '배정' : '신청'} 현황</h2><p>동아리를 눌러 명단과 1·2·3지망을 확인해요.</p>{phase === 'closed' && <p>고정 명단은 신청을 다시 열지 않고 수정할 수 있어요. 정원 변경·학생 추가는 ‘신청 다시 열기’ 후 가능해요.</p>}</div><Button variant="ghost" disabled={busy || !canConfigure} onClick={() => { setSettingsRevision(state.revision); setDraft(clubs.map(club => ({ ...club, fixedStudentIds: [...(club.fixedStudentIds ?? [])] }))); setSettingsError(''); setSettings(true); }}><Settings2 size={16}/>{fixedOnly ? '고정 명단 수정' : '정원·배정 설정'}</Button></div>
+        <section className="panel club-panel"><div className="panel-heading"><div><h2>동아리별 {result ? '배정' : '신청'} 현황</h2><p>동아리를 눌러 명단과 1·2·3지망을 확인해요.</p>{phase === 'closed' && <p>고정 명단은 신청을 다시 열지 않고 수정할 수 있어요. 정원 변경·학생 추가는 ‘신청 다시 열기’ 후 가능해요.</p>}</div><div className="flex flex-wrap gap-2"><FirstRankExclusions state={state} busy={busy} onSave={(clubId,studentIds,revision)=>perform({action:'first-rank-exclusions',clubId,studentIds},'1지망 제외 명단을 저장했어요. 2·3지망은 정상 참여해요.',revision)}/><Button variant="ghost" disabled={busy || !canConfigure} onClick={() => { setSettingsRevision(state.revision); setDraft(clubs.map(club => ({ ...club, fixedStudentIds: [...(club.fixedStudentIds ?? [])] }))); setSettingsError(''); setSettings(true); }}><Settings2 size={16}/>{fixedOnly ? '고정 명단 수정' : '정원·배정 설정'}</Button></div></div>
           <div className="club-table"><div className="club-table-head"><span>동아리</span><span>{result ? '배정 인원' : '1지망 신청'} / 최대 정원</span><span>상태</span></div>{stats.map((club, index) => {
             const count = result ? club.count : club.first;
             const over = !result && club.eligibleFirst > club.max - club.reserved;

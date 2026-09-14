@@ -22,7 +22,7 @@ export async function getStudentState(db:D1Database,id:string):Promise<StudentSt
   const school=rows[0].results[0] as SchoolRow, row=rows[1].results[0] as StudentRow|undefined;
   if(!row) throw new StoreError('학생을 찾을 수 없습니다.',404);
   const clubs:Club[]=JSON.parse(school.clubs_json), result:Result|null=school.result_json?JSON.parse(school.result_json):null;
-  return {phase:school.phase,clubs:clubs.map(({fixedStudentIds:_,...club})=>club),student:rosterStudent(row),placement:school.phase==='final'?(result?.placements[id]??null):null};
+  return {phase:school.phase,clubs:clubs.map(({fixedStudentIds:_,firstRankExcludedStudentIds:__,...club})=>club),student:rosterStudent(row),placement:school.phase==='final'?(result?.placements[id]??null):null};
 }
 type Mutation = { revision?:number; phases:Phase[]; action:string; actor:string; payload:unknown; phase?:Phase; clubs?:Club[]; result?:Result; guard?:string; guardBinds?:unknown[]; statements?:(operationId:string)=>D1PreparedStatement[] };
 async function mutate(db:D1Database,m:Mutation) {
@@ -55,6 +55,7 @@ function validateClubs(clubs:Club[],students:RosterStudent[]) {
   if(!Array.isArray(clubs)||clubs.length<3||clubs.length>100||clubs.some(c=>!c||typeof c.id!=='string'||!/^[a-zA-Z0-9_-]{1,80}$/.test(c.id)||typeof c.name!=='string'||!c.name.trim()||c.name.length>100||typeof c.category!=='string'||c.category.length>100||c.max>999)) throw new StoreError('동아리 설정을 확인해 주세요. 동아리는 3개 이상이어야 합니다.');
   const errors=validate(students.map(s=>({...s,choices:s.choices.length?s.choices:clubs.slice(0,3).map(c=>c.id)})),clubs);
   if(errors.length) throw new StoreError(errors[0]);
+  if(clubs.some(c=>c.firstRankExcludedStudentIds?.some(id=>!students.some(s=>s.id===id)))) throw new StoreError('1지망 제외 명단에 없는 학생 번호가 있어요.');
 }
 export async function submitApplication(db:D1Database,id:string,choices:string[],expectedVersion:number,auth?:StudentMutationAuth):Promise<StudentState> {
   const state=await getTeacherState(db); requirePhase(state,['open']);
@@ -94,6 +95,7 @@ export async function importStudents(db:D1Database,rows:(RosterInput&{codeHash:s
 }
 export async function updateClubs(db:D1Database,clubs:Club[],expectedRevision:number,actor:string):Promise<PortalState> {
   const state=await getTeacherState(db);requirePhase(state,['setup','open','closed','allocated']);requireRevision(state,expectedRevision);validateClubs(clubs,state.students);
+  if(clubs.some(c=>JSON.stringify(c.firstRankExcludedStudentIds??[])!==JSON.stringify(state.clubs.find(old=>old.id===c.id)?.firstRankExcludedStudentIds??[]))) throw new StoreError('1지망 제외 명단은 전용 설정에서 변경해 주세요.');
   const fixedOnly = ['closed','allocated'].includes(state.phase);
   if(fixedOnly) {
     if(clubs.length!==state.clubs.length || clubs.some((club,index)=>{
@@ -106,6 +108,16 @@ export async function updateClubs(db:D1Database,clubs:Club[],expectedRevision:nu
   try { if(state.result) result=applyFixedRoster(state.result,state.clubs,clubs); }
   catch(error) { throw new StoreError((error as Error).message); }
   await mutate(db,{revision:expectedRevision,phases:[state.phase],action:fixedOnly?'clubs.fixed-update':'clubs.update',actor,payload:{before:state.clubs,clubs,...(result?{previousResult:state.result,result}:{})},clubs,result});return getTeacherState(db);
+}
+export async function updateFirstRankExclusions(db:D1Database,clubId:string,studentIds:string[],expectedRevision:number,actor:string):Promise<PortalState> {
+  const state=await getTeacherState(db);requirePhase(state,['setup','open','closed']);requireRevision(state,expectedRevision);
+  if(state.result) throw new StoreError('1지망 배정 이후에는 제외 명단을 변경할 수 없어요.',409);
+  const club=state.clubs.find(c=>c.id===clubId);if(!club)throw new StoreError('동아리를 찾을 수 없어요.');
+  if(!Array.isArray(studentIds)||studentIds.length>state.students.length||studentIds.some(id=>typeof id!=='string'))throw new StoreError('제외할 학생을 확인해 주세요.');
+  const clubs=state.clubs.map(c=>c.id===clubId?{...c,firstRankExcludedStudentIds:studentIds}:c);
+  validateClubs(clubs,state.students);
+  await mutate(db,{revision:expectedRevision,phases:['setup','open','closed'],action:'clubs.first-rank-exclusions',actor,payload:{clubId,before:club.firstRankExcludedStudentIds??[],after:studentIds},clubs});
+  return getTeacherState(db);
 }
 export async function changePhase(db:D1Database,phase:'open'|'closed',expectedRevision:number,actor:string):Promise<PortalState> {
   const state=await getTeacherState(db);requireRevision(state,expectedRevision);

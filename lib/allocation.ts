@@ -1,7 +1,7 @@
-export type Club = { id: string; name: string; category: string; min: number; max: number; allocationMode?: 'lottery' | 'fixed'; fixedStudentIds?: string[] };
+export type Club = { id: string; name: string; category: string; min: number; max: number; allocationMode?: 'lottery' | 'fixed'; fixedStudentIds?: string[]; firstRankExcludedStudentIds?: string[] };
 export type Student = { id: string; grade: number; classNo: number; number: number; name: string; gender: string; choices: string[] };
 export type Placement = { club: string | null; rank: number | null; reason?: string; assignmentType?: 'fixed' | 'manual' };
-export type Round = { rank: number; club: string; candidates: string[]; winners: string[]; seats: number };
+export type Round = { rank: number; club: string; candidates: string[]; winners: string[]; seats: number; excluded?: string[] };
 export type Result = { seed: string; placements: Record<string, Placement>; rounds: Round[]; completedRank?: number };
 // Results saved before staged allocation already contain all three rounds.
 export const completedRank = (result: Result | null) => result ? result.completedRank ?? 3 : 0;
@@ -41,6 +41,9 @@ export function validate(students: Student[], clubs: Club[]): string[] {
   }
   const fixedAssignments = new Map<string, string>();
   for(const club of clubs) {
+    const excluded=club.firstRankExcludedStudentIds;
+    if(excluded!==undefined&&(!Array.isArray(excluded)||excluded.some(id=>typeof id!=='string')||new Set(excluded).size!==excluded.length)) errors.push(`${club.name}: 1지망 제외 명단을 확인해 주세요.`);
+    if(Array.isArray(excluded)&&club.allocationMode==='fixed'&&Array.isArray(club.fixedStudentIds)&&excluded.some(id=>club.fixedStudentIds!.includes(id))) errors.push(`${club.name}: 같은 학생을 고정 배정과 1지망 제외에 동시에 지정할 수 없어요.`);
     if(club.allocationMode!==undefined && club.allocationMode!=='lottery' && club.allocationMode!=='fixed') errors.push(`${club.name}: 배정 방식을 확인해 주세요.`);
     if(club.fixedStudentIds!==undefined && !Array.isArray(club.fixedStudentIds)) {
       errors.push(`${club.name}: 고정 명단을 확인해 주세요.`);
@@ -82,17 +85,19 @@ export function allocateNext(students: Student[], clubs: Club[], seed: string, p
   const rounds: Round[]=[...(previous?.rounds ?? [])];
   for(const club of [...clubs].sort((a,b)=>a.id.localeCompare(b.id))) {
     const occupied=Object.values(placements).filter(p=>p.club===club.id).length, seats=club.max-occupied;
-    const round=drawRound(students,placements,seed,rank,club.id,seats);
+    const round=drawRound(students,placements,seed,rank,club.id,seats,rank===1?club.firstRankExcludedStudentIds:undefined);
     for(const id of round.winners) placements[id]={club:club.id,rank};
     rounds.push(round);
   }
   return {seed,placements,rounds,completedRank:rank};
 }
-function drawRound(students: Student[], placements: Record<string,Placement>, seed: string, rank: number, club: string, seats: number): Round {
-  const candidates=students.filter(s=>!placements[s.id]?.club&&s.choices[rank-1]===club).map(s=>s.id).sort();
+function drawRound(students: Student[], placements: Record<string,Placement>, seed: string, rank: number, club: string, seats: number, excludedIds?: string[]): Round {
+  const eligible=students.filter(s=>!placements[s.id]?.club&&s.choices[rank-1]===club).map(s=>s.id).sort();
+  const excluded=rank===1?eligible.filter(id=>excludedIds?.includes(id)):[];
+  const candidates=eligible.filter(id=>!excluded.includes(id));
   const ordered=[...candidates], rng=random(`${seed}|${rank}|${club}`);
   for(let i=ordered.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[ordered[i],ordered[j]]=[ordered[j],ordered[i]];}
-  return {rank,club,candidates,winners:ordered.slice(0,Math.max(0,seats)),seats};
+  return {rank,club,candidates,winners:ordered.slice(0,Math.max(0,seats)),seats,...(excluded.length?{excluded}:{})};
 }
 export function clubRoundDone(result: Result, rank: number, clubId: string): boolean {
   return completedRank(result)>=rank || result.rounds.some(round=>round.rank===rank&&round.club===clubId);

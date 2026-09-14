@@ -1,5 +1,5 @@
 import { assertSameOrigin, AuthError, createStudentCodeIssuer, loginStudent, loginTeacher, logout, requireSession, type PortalEnv } from './auth.ts';
-import { adjustPlacement, changePhase, finalize, getAudit, getHistory, getStudentState, getTeacherState, importStudents, resetStudentCode, runAllocation, runClubAllocation, StoreError, submitApplication, updateClubs, verifyApplication } from './store.ts';
+import { adjustPlacement, changePhase, finalize, getAudit, getHistory, getStudentState, getTeacherState, importStudents, resetStudentCode, runAllocation, runClubAllocation, updateFirstRankExclusions, StoreError, submitApplication, updateClubs, verifyApplication } from './store.ts';
 import type { Club } from '../allocation.ts';
 import type { IssuedCode, RosterInput } from '../portal-types.ts';
 
@@ -146,6 +146,10 @@ export async function handlePortalRequest(request: Request, env: PortalEnv): Pro
           allowed(body, ['action', 'seed', 'rank', 'revision']);
           if(integer(body,'rank')!==1) throw new AuthError('2·3지망은 동아리별 배정 화면에서 인원을 지정해 실행해 주세요.',409);
           return json({ state: await runAllocation(env.DB, textField(body, 'seed'), revision, actor, integer(body, 'rank')) });
+        case 'first-rank-exclusions':
+          allowed(body,['action','clubId','studentIds','revision']);
+          if(!Array.isArray(body.studentIds)||body.studentIds.some(id=>typeof id!=='string')) throw new AuthError('제외할 학생을 확인해 주세요.',400);
+          return json({state:await updateFirstRankExclusions(env.DB,textField(body,'clubId'),body.studentIds as string[],revision,actor)});
         case 'allocate-club':
           allowed(body, ['action', 'clubId', 'rank', 'seats', 'revision']);
           return json({ state: await runClubAllocation(env.DB, textField(body,'clubId'), integer(body,'rank'), integer(body,'seats'), revision, actor) });
