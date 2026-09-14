@@ -2,7 +2,9 @@ export type Club = { id: string; name: string; category: string; min: number; ma
 export type Student = { id: string; grade: number; classNo: number; number: number; name: string; gender: string; choices: string[] };
 export type Placement = { club: string | null; rank: number | null; reason?: string; assignmentType?: 'fixed' | 'manual' };
 export type Round = { rank: number; club: string; candidates: string[]; winners: string[]; seats: number };
-export type Result = { seed: string; placements: Record<string, Placement>; rounds: Round[] };
+export type Result = { seed: string; placements: Record<string, Placement>; rounds: Round[]; completedRank?: number };
+// Results saved before staged allocation already contain all three rounds.
+export const completedRank = (result: Result | null) => result ? result.completedRank ?? 3 : 0;
 export const CLUBS: Club[] = [
   ['badminton','배드민턴','스포츠'], ['dance','방송댄스','예술'], ['paper','종이공예','예술'],
   ['pen','펜드림','예술'], ['drawing','디지털드로잉','디지털'], ['maker','AI메이커','디지털'],
@@ -62,14 +64,22 @@ export function validate(students: Student[], clubs: Club[]): string[] {
   return errors;
 }
 export function allocate(students: Student[], clubs: Club[], seed: string): Result {
+  let result = allocateNext(students, clubs, seed);
+  result = allocateNext(students, clubs, seed, result);
+  return allocateNext(students, clubs, seed, result);
+}
+export function allocateNext(students: Student[], clubs: Club[], seed: string, previous: Result | null = null): Result {
   const errors=validate(students,clubs); if(errors.length) throw new Error(errors[0]);
   if(!seed.trim()) throw new Error('추첨 번호를 입력해 주세요.');
-  const placements: Record<string,Placement> = Object.fromEntries(students.map(s=>[s.id,{club:null,rank:null}]));
-  for(const club of clubs.filter(c=>c.allocationMode==='fixed')) {
+  const rank = completedRank(previous) + 1;
+  if(rank > 3) throw new Error('3지망 배정까지 이미 완료했어요.');
+  if(previous && previous.seed !== seed) throw new Error('처음 배정할 때 사용한 추첨 번호를 유지해 주세요.');
+  const placements: Record<string,Placement> = previous ? {...previous.placements} : Object.fromEntries(students.map(s=>[s.id,{club:null,rank:null}]));
+  if(!previous) for(const club of clubs.filter(c=>c.allocationMode==='fixed')) {
     for(const id of club.fixedStudentIds ?? []) placements[id]={club:club.id,rank:0,reason:'명단 고정',assignmentType:'fixed'};
   }
-  const rounds: Round[]=[];
-  for(let rank=1;rank<=3;rank++) for(const club of [...clubs].sort((a,b)=>a.id.localeCompare(b.id))) {
+  const rounds: Round[]=[...(previous?.rounds ?? [])];
+  for(const club of [...clubs].sort((a,b)=>a.id.localeCompare(b.id))) {
     const occupied=Object.values(placements).filter(p=>p.club===club.id).length, seats=club.max-occupied;
     const candidates=students.filter(s=>!placements[s.id].club&&s.choices[rank-1]===club.id).map(s=>s.id).sort();
     const ordered=[...candidates], rng=random(`${seed}|${rank}|${club.id}`);
@@ -78,7 +88,19 @@ export function allocate(students: Student[], clubs: Club[], seed: string): Resu
     for(const id of winners) placements[id]={club:club.id,rank};
     rounds.push({rank,club:club.id,candidates,winners,seats});
   }
-  return {seed,placements,rounds};
+  return {seed,placements,rounds,completedRank:rank};
+}
+export function applyFixedRoster(result: Result, before: Club[], after: Club[]): Result {
+  const fixedMap = (clubs: Club[]) => new Map(clubs.filter(c=>c.allocationMode==='fixed').flatMap(c=>(c.fixedStudentIds??[]).map(id=>[id,c.id] as const)));
+  const oldFixed = fixedMap(before), newFixed = fixedMap(after);
+  const placements = {...result.placements};
+  for(const id of new Set([...oldFixed.keys(), ...newFixed.keys()])) {
+    if(oldFixed.get(id) === newFixed.get(id)) continue;
+    const destination = newFixed.get(id);
+    placements[id] = destination ? {club:destination,rank:0,reason:'명단 고정',assignmentType:'fixed'} : {club:null,rank:null,reason:'고정 해제'};
+  }
+  for(const club of after) if(Object.values(placements).filter(p=>p.club===club.id).length>club.max) throw new Error(`${club.name}: 기존 배정과 고정 명단을 합치면 최대 정원을 초과해요. 먼저 배정을 조정해 주세요.`);
+  return {...result,placements};
 }
 export function moveStudent(result:Result, students:Student[], clubs:Club[], id:string, destination:string, reason:string): Result {
   if(!students.some(s=>s.id===id)||!result.placements[id]) throw new Error('학생을 찾을 수 없습니다.');

@@ -1,4 +1,4 @@
-import { CLUBS, allocate, moveStudent, validate, type Club, type Result } from '../allocation.ts';
+import { CLUBS, allocateNext, completedRank, applyFixedRoster, moveStudent, validate, type Club, type Result } from '../allocation.ts';
 import type { ApplicationRevision, Phase, PortalState, RosterInput, RosterStudent, StudentState } from '../portal-types.ts';
 import { StoreError, type SchoolRow, type StudentRow, type AuditEntry } from './store-types.ts';
 export { StoreError } from './store-types.ts';
@@ -93,8 +93,19 @@ export async function importStudents(db:D1Database,rows:(RosterInput&{codeHash:s
   }});return prepared.map(({id,name})=>({id,name}));
 }
 export async function updateClubs(db:D1Database,clubs:Club[],expectedRevision:number,actor:string):Promise<PortalState> {
-  const state=await getTeacherState(db);requirePhase(state,['setup','open']);requireRevision(state,expectedRevision);validateClubs(clubs,state.students);
-  await mutate(db,{revision:expectedRevision,phases:['setup','open'],action:'clubs.update',actor,payload:{clubs},clubs});return getTeacherState(db);
+  const state=await getTeacherState(db);requirePhase(state,['setup','open','closed','allocated']);requireRevision(state,expectedRevision);validateClubs(clubs,state.students);
+  const fixedOnly = ['closed','allocated'].includes(state.phase);
+  if(fixedOnly) {
+    if(clubs.length!==state.clubs.length || clubs.some((club,index)=>{
+      const old=state.clubs[index];
+      return club.id!==old.id || club.name!==old.name || club.category!==old.category || club.min!==old.min || club.max!==old.max;
+    })) throw new StoreError('접수 마감 후에는 고정 명단만 수정할 수 있어요.');
+    clubs=state.clubs.map((club,index)=>({...club,allocationMode:clubs[index].allocationMode,fixedStudentIds:clubs[index].fixedStudentIds??[]}));
+  }
+  let result:Result|undefined;
+  try { if(state.result) result=applyFixedRoster(state.result,state.clubs,clubs); }
+  catch(error) { throw new StoreError((error as Error).message); }
+  await mutate(db,{revision:expectedRevision,phases:[state.phase],action:fixedOnly?'clubs.fixed-update':'clubs.update',actor,payload:{before:state.clubs,clubs,...(result?{previousResult:state.result,result}:{})},clubs,result});return getTeacherState(db);
 }
 export async function changePhase(db:D1Database,phase:'open'|'closed',expectedRevision:number,actor:string):Promise<PortalState> {
   const state=await getTeacherState(db);requireRevision(state,expectedRevision);
@@ -102,13 +113,14 @@ export async function changePhase(db:D1Database,phase:'open'|'closed',expectedRe
   const allowed:Phase[]=phase==='open'?['setup','closed']:['open'];requirePhase(state,allowed);validateClubs(state.clubs,state.students);
   await mutate(db,{revision:expectedRevision,phases:allowed,action:'phase.'+phase,actor,payload:{from:state.phase,to:phase},phase});return getTeacherState(db);
 }
-export async function runAllocation(db:D1Database,seed:string,expectedRevision:number,actor:string):Promise<PortalState> {
-  const state=await getTeacherState(db);requirePhase(state,['closed']);requireRevision(state,expectedRevision);
+export async function runAllocation(db:D1Database,seed:string,expectedRevision:number,actor:string,rank=1):Promise<PortalState> {
+  const state=await getTeacherState(db);requirePhase(state,['closed','allocated']);requireRevision(state,expectedRevision);
+  if(rank!==completedRank(state.result)+1 || rank>3) throw new StoreError('현재 진행할 지망이 아니에요. 새로고침한 뒤 확인해 주세요.',409);
   if(typeof seed!=='string'||!seed.trim()||seed.length>200) throw new StoreError('추첨 번호를 1~200자로 입력해 주세요.');
   const fixed=new Set(state.clubs.filter(c=>c.allocationMode==='fixed').flatMap(c=>c.fixedStudentIds??[]));
-  let result:Result;try { result=allocate(state.students.filter(s=>s.applicationVersion>0||fixed.has(s.id)),state.clubs,seed); } catch(error) {throw new StoreError((error as Error).message);}
+  let result:Result;try { result=allocateNext(state.students.filter(s=>s.applicationVersion>0||fixed.has(s.id)),state.clubs,seed,state.result); } catch(error) {throw new StoreError((error as Error).message);}
   for(const student of state.students) if(!result.placements[student.id]) result.placements[student.id]={club:null,rank:null,reason:'신청 미제출'};
-  await mutate(db,{revision:expectedRevision,phases:['closed'],action:'allocation.run',actor,payload:{seed,clubs:state.clubs,students:state.students,result},phase:'allocated',result});return getTeacherState(db);
+  await mutate(db,{revision:expectedRevision,phases:[state.phase],action:'allocation.run',actor,payload:{seed,rank,clubs:state.clubs,students:state.students,result},phase:'allocated',result});return getTeacherState(db);
 }
 export async function adjustPlacement(db:D1Database,id:string,destination:string,reason:string,expectedRevision:number,actor:string):Promise<PortalState> {
   const state=await getTeacherState(db);requirePhase(state,['allocated']);requireRevision(state,expectedRevision);
@@ -120,6 +132,7 @@ export async function adjustPlacement(db:D1Database,id:string,destination:string
 export async function finalize(db:D1Database,expectedRevision:number,actor:string):Promise<PortalState> {
   const state=await getTeacherState(db);requirePhase(state,['allocated']);requireRevision(state,expectedRevision);
   if(!state.result) throw new StoreError('배정 결과가 없습니다.',409);
+  if(completedRank(state.result)<3) throw new StoreError('3지망 배정까지 진행하고 검토한 뒤 최종 확정해 주세요.',409);
   await mutate(db,{revision:expectedRevision,phases:['allocated'],action:'allocation.finalize',actor,payload:{result:state.result},phase:'final'});return getTeacherState(db);
 }
 export async function getHistory(db:D1Database,studentId:string):Promise<ApplicationRevision[]> {

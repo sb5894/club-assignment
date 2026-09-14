@@ -143,8 +143,8 @@ export async function handlePortalRequest(request: Request, env: PortalEnv): Pro
           if (body.phase !== 'open' && body.phase !== 'closed') throw new AuthError('접수 상태를 확인해 주세요.', 400);
           return json({ state: await changePhase(env.DB, body.phase, revision, actor) });
         case 'allocate':
-          allowed(body, ['action', 'seed', 'revision']);
-          return json({ state: await runAllocation(env.DB, textField(body, 'seed'), revision, actor) });
+          allowed(body, ['action', 'seed', 'rank', 'revision']);
+          return json({ state: await runAllocation(env.DB, textField(body, 'seed'), revision, actor, integer(body, 'rank')) });
         case 'adjust':
           allowed(body, ['action', 'studentId', 'destination', 'reason', 'revision']);
           return json({ state: await adjustPlacement(env.DB, textField(body, 'studentId'), textField(body, 'destination'), textField(body, 'reason', 1000), revision, actor) });

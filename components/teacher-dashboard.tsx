@@ -9,6 +9,7 @@ import { AlertDialog, AlertDialogContent, AlertDialogTitle, AlertDialogDescripti
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { ClubSettings } from '@/components/club-settings';
 import { ClubDetail } from '@/components/club-detail';
+import { completedRank } from '@/lib/allocation';
 import type { Club, Placement } from '@/lib/allocation';
 import type { PortalState, RosterInput, RosterStudent, IssuedCode, ApplicationRevision } from '@/lib/portal-types';
 
@@ -16,7 +17,7 @@ type Action =
   | { action: 'import'; rows: RosterInput[] }
   | { action: 'settings'; clubs: Club[] }
   | { action: 'phase'; phase: 'open' | 'closed' }
-  | { action: 'allocate'; seed: string }
+  | { action: 'allocate'; seed: string; rank: number }
   | { action: 'adjust'; studentId: string; destination: string; reason: string }
   | { action: 'finalize' }
   | { action: 'reset-code'; studentId: string };
@@ -94,6 +95,7 @@ export function TeacherDashboard({ initialState }: { initialState: PortalState }
   const [confirmation, setConfirmation] = useState<Confirmation>(null);
   const [settings, setSettings] = useState(false);
   const [draft, setDraft] = useState<Club[]>([]);
+  const [settingsRevision, setSettingsRevision] = useState(initialState.revision);
   const [settingsError, setSettingsError] = useState('');
   const [detail, setDetail] = useState<string | null>(null);
   const [filter, setFilter] = useState('all');
@@ -113,7 +115,10 @@ export function TeacherDashboard({ initialState }: { initialState: PortalState }
   const historyRequest = useRef(0);
   const { students, clubs, result, phase } = state;
   const locked = phase === 'final';
-  const canConfigure = !result && ['setup', 'open'].includes(phase);
+  const fixedOnly = ['closed', 'allocated'].includes(phase);
+  const canConfigure = !locked;
+  const finishedRank = completedRank(result);
+  const nextRank = finishedRank + 1;
   const clubName = (id: string | null | undefined) => clubs.find(club => club.id === id)?.name ?? (id ? '알 수 없는 동아리' : '미배정');
   const fixedIds = useMemo(() => new Set(clubs.filter(club => club.allocationMode === 'fixed').flatMap(club => club.fixedStudentIds ?? [])), [clubs]);
   const stats = useMemo(() => clubs.map(club => ({
@@ -147,12 +152,12 @@ export function TeacherDashboard({ initialState }: { initialState: PortalState }
     return data;
   }
 
-  async function perform(action: Action, message: string): Promise<boolean> {
+  async function perform(action: Action, message: string, revision = state.revision): Promise<boolean> {
     if (busyRef.current) return false;
     busyRef.current = true; setBusy(true); setError(''); setNotice('');
     try {
       const response = await request<{ state: PortalState; codes?: IssuedCode[] }>('/api/teacher/action', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...action, revision: state.revision }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...action, revision }),
       });
       setState(response.state);
       if (response.codes?.length) setCodes(response.codes);
@@ -241,13 +246,13 @@ export function TeacherDashboard({ initialState }: { initialState: PortalState }
     const target = confirmation;
     setConfirmation(null);
     if (target === 'close') await perform({ action: 'phase', phase: 'closed' }, '신청을 마감했어요. 배정 전까지 다시 열 수 있어요.');
-    else if (target === 'allocate') await perform({ action: 'allocate', seed: seed.trim() }, '배정을 완료했어요. 미배정 학생과 최소 인원 미달 동아리를 검토해 주세요.');
+    else if (target === 'allocate') await perform({ action: 'allocate', seed: result?.seed ?? seed.trim(), rank: nextRank }, `${nextRank}지망 배정을 완료했어요. 결과를 확인하고 필요한 배정을 조정해 주세요.`);
     else if (target === 'finalize') await perform({ action: 'finalize' }, '배정을 최종 확정했어요. 학생들이 자신의 결과를 확인할 수 있어요.');
     else if (target && typeof target === 'object') await perform({ action: 'reset-code', studentId: target.resetCode.id }, '새 개인 코드를 발급했어요. 이전 코드는 사용할 수 없어요.');
   }
 
-  const confirmationTitle = confirmation === 'close' ? '학생 신청을 마감할까요?' : confirmation === 'allocate' ? '자동 배정을 실행할까요?' : confirmation === 'finalize' ? '배정을 최종 확정할까요?' : '개인 코드를 다시 발급할까요?';
-  const confirmationDescription = confirmation === 'close' ? `신청 ${submitted}명 / 미신청 ${students.length - submitted}명 / 현재 신청 확인 완료 ${verifiedCount}명입니다. 마감하면 학생이 지망을 수정할 수 없어요.` : confirmation === 'allocate' ? `전체 ${students.length}명 중 고정 명단 ${fixedIds.size}명을 먼저 배정하고, 나머지 신청자를 1→2→3지망 순서로 배정해요. 미신청 학생은 고정 명단에 있는 경우에만 자동 배정돼요. 추첨 번호: ${seed.trim()}. 배정 후에는 신청을 다시 열거나 설정을 바꿀 수 없어요.` : confirmation === 'finalize' ? `미배정 ${waiting}명, 최소 인원 미달 ${shortage.length}개입니다. 최종 확정 후에는 배정을 조정할 수 없어요.` : confirmation && typeof confirmation === 'object' ? `${confirmation.resetCode.id} ${confirmation.resetCode.name} 학생의 이전 코드가 즉시 무효화돼요. 새 코드는 발급 직후에만 표시되므로 해당 학생에게 개별 전달해 주세요.` : '';
+  const confirmationTitle = confirmation === 'close' ? '학생 신청을 마감할까요?' : confirmation === 'allocate' ? `${nextRank}지망 배정을 실행할까요?` : confirmation === 'finalize' ? '배정을 최종 확정할까요?' : '개인 코드를 다시 발급할까요?';
+  const confirmationDescription = confirmation === 'close' ? `신청 ${submitted}명 / 미신청 ${students.length - submitted}명 / 현재 신청 확인 완료 ${verifiedCount}명입니다. 마감하면 학생이 지망을 수정할 수 없어요.` : confirmation === 'allocate' ? `${nextRank}지망만 배정한 뒤 멈춰요. ${result ? '기존 배정과 교사 조정을 유지하고 미배정 신청자만 남은 정원에 배정해요.' : `고정 명단 ${fixedIds.size}명을 먼저 배정한 뒤 나머지 신청자를 배정해요. 배정 시작 후에는 신청을 다시 열 수 없어요.`} 결과를 확인하고 조정한 뒤 다음 단계로 진행해 주세요. 추첨 번호: ${result?.seed ?? seed.trim()}.` : confirmation === 'finalize' ? `미배정 ${waiting}명, 최소 인원 미달 ${shortage.length}개입니다. 최종 확정 후에는 배정을 조정할 수 없어요.` : confirmation && typeof confirmation === 'object' ? `${confirmation.resetCode.id} ${confirmation.resetCode.name} 학생의 이전 코드가 즉시 무효화돼요. 새 코드는 발급 직후에만 표시되므로 해당 학생에게 개별 전달해 주세요.` : '';
 
   return <div className="app teacher-portal">
     <header className="topbar"><Link className="brand" href="/teacher"><span className="brand-mark"><LayoutGrid size={23}/></span><span>안성초 5·6학년 동아리 신청<small>선생님 관리</small></span></Link><div className="portal-actions"><Button variant="outline" onClick={refresh} disabled={busy}><RefreshCw size={16}/>새로고침</Button><Button variant="ghost" onClick={logout} disabled={busy}><LogOut size={16}/>로그아웃</Button></div></header>
@@ -276,7 +281,7 @@ export function TeacherDashboard({ initialState }: { initialState: PortalState }
       </section>}
 
       <div className="dashboard-grid">
-        <section className="panel club-panel"><div className="panel-heading"><div><h2>동아리별 {result ? '배정' : '신청'} 현황</h2><p>동아리를 눌러 명단과 1·2·3지망을 확인해요.</p>{phase === 'closed' && <p>정원·고정 명단 변경이나 학생 추가는 ‘신청 다시 열기’ 후 가능해요.</p>}</div><Button variant="ghost" disabled={busy || !canConfigure} onClick={() => { setDraft(clubs.map(club => ({ ...club, fixedStudentIds: [...(club.fixedStudentIds ?? [])] }))); setSettingsError(''); setSettings(true); }}><Settings2 size={16}/>정원·배정 설정</Button></div>
+        <section className="panel club-panel"><div className="panel-heading"><div><h2>동아리별 {result ? '배정' : '신청'} 현황</h2><p>동아리를 눌러 명단과 1·2·3지망을 확인해요.</p>{phase === 'closed' && <p>고정 명단은 신청을 다시 열지 않고 수정할 수 있어요. 정원 변경·학생 추가는 ‘신청 다시 열기’ 후 가능해요.</p>}</div><Button variant="ghost" disabled={busy || !canConfigure} onClick={() => { setSettingsRevision(state.revision); setDraft(clubs.map(club => ({ ...club, fixedStudentIds: [...(club.fixedStudentIds ?? [])] }))); setSettingsError(''); setSettings(true); }}><Settings2 size={16}/>{fixedOnly ? '고정 명단 수정' : '정원·배정 설정'}</Button></div>
           <div className="club-table"><div className="club-table-head"><span>동아리</span><span>{result ? '배정 인원' : '1지망 신청'} / 최대 정원</span><span>상태</span></div>{stats.map((club, index) => {
             const count = result ? club.count : club.first;
             const over = !result && club.eligibleFirst > club.max - club.reserved;
@@ -285,13 +290,13 @@ export function TeacherDashboard({ initialState }: { initialState: PortalState }
           })}</div><p className="panel-foot">고정 학생을 먼저 배정하고 모든 동아리의 남은 정원을 지망별로 배정해요. 신청 인원에는 고정 학생도 포함돼요.</p>
         </section>
         <aside className="right-column">
-          <section className="allocation-card"><span className="section-number">ALLOCATION</span><h2>{locked ? '최종 확정했어요' : result ? '배정을 검토해 주세요' : phase === 'open' ? '학생 신청을 받고 있어요' : phase === 'closed' ? '마감한 신청을 배정해요' : '명단과 설정을 준비해요'}</h2>
+          <section className="allocation-card"><span className="section-number">ALLOCATION</span><h2>{locked ? '최종 확정했어요' : result ? `${finishedRank}지망 결과를 검토해 주세요` : phase === 'open' ? '학생 신청을 받고 있어요' : phase === 'closed' ? '마감한 신청을 배정해요' : '명단과 설정을 준비해요'}</h2>
             <p>{result ? `배정 ${placed}명 · 미배정 ${waiting}명` : `신청 ${submitted}명 · 명단 고정 ${fixedIds.size}명`}</p>
             {!result && <p>고정 명단을 먼저 배정하고, 나머지 신청자는 1지망부터 정원 초과 시 동일 확률로 추첨해요.</p>}
             {phase === 'setup' && <Button className="run-button" disabled={busy || !students.length} onClick={() => perform({ action: 'phase', phase: 'open' }, '학생 신청 접수를 시작했어요. 학생들에게 신청 주소와 개인 코드를 안내해 주세요.')}>학생 신청 접수 시작<ArrowRight size={17}/></Button>}
             {phase === 'open' && <Button className="run-button" disabled={busy} onClick={() => setConfirmation('close')}><LockKeyhole size={17}/>신청 마감</Button>}
-            {phase === 'closed' && <><label className="seed-label" htmlFor="teacher-seed">추첨 번호</label><input id="teacher-seed" value={seed} onChange={event => setSeed(event.target.value)} maxLength={80} disabled={busy}/><small className="seed-help">같은 입력 자료와 번호는 같은 추첨 결과를 만들어요.</small><Button className="run-button" disabled={busy || !seed.trim() || (!submitted && !fixedIds.size)} onClick={() => setConfirmation('allocate')}><Shuffle size={17}/>자동 배정 실행</Button><Button className="audit-button" variant="ghost" disabled={busy} onClick={() => perform({ action: 'phase', phase: 'open' }, '신청 접수를 다시 열었어요. 학생이 지망을 다시 제출할 수 있어요.')}>신청 다시 열기</Button></>}
-            {result && <><ol className="steps">{[1, 2, 3].map(rank => <li key={rank}><span className="checked"><Check size={14}/></span><div><b>{rank}지망 배정</b><small>{Object.values(result.placements).filter(placement => placement.rank === rank).length}명 배정</small></div></li>)}</ol><Button className="run-button" disabled={busy || locked} onClick={() => setConfirmation('finalize')}><LockKeyhole size={17}/>{locked ? '최종 확정 완료' : '검토 후 최종 확정'}</Button></>}
+            {phase === 'closed' && <><label className="seed-label" htmlFor="teacher-seed">추첨 번호</label><input id="teacher-seed" value={seed} onChange={event => setSeed(event.target.value)} maxLength={80} disabled={busy}/><small className="seed-help">같은 입력 자료와 번호는 같은 추첨 결과를 만들어요.</small><Button className="run-button" disabled={busy || !seed.trim() || (!submitted && !fixedIds.size)} onClick={() => setConfirmation('allocate')}><Shuffle size={17}/>1지망 배정 실행</Button><Button className="audit-button" variant="ghost" disabled={busy} onClick={() => perform({ action: 'phase', phase: 'open' }, '신청 접수를 다시 열었어요. 학생이 지망을 다시 제출할 수 있어요.')}>신청 다시 열기</Button></>}
+            {result && <><ol className="steps">{[1, 2, 3].map(rank => <li key={rank}><span className={rank <= finishedRank ? 'checked' : ''}>{rank <= finishedRank ? <Check size={14}/> : rank}</span><div><b>{rank}지망 {rank <= finishedRank ? '배정 완료' : '대기'}</b><small>{rank <= finishedRank ? `${Object.values(result.placements).filter(placement => placement.rank === rank).length}명 배정` : '아직 실행하지 않았어요'}</small></div></li>)}</ol>{!locked && <p>학생별 ‘배정 조정’ 또는 ‘고정 명단 수정’으로 결과를 조정할 수 있어요. 기존 배정은 다음 지망에서도 유지돼요.</p>}{finishedRank < 3 && <Button className="run-button" disabled={busy || locked} onClick={() => setConfirmation('allocate')}><Shuffle size={17}/>검토 완료 · {nextRank}지망 배정 실행</Button>}<Button className="run-button" disabled={busy || locked || finishedRank < 3} onClick={() => setConfirmation('finalize')}><LockKeyhole size={17}/>{locked ? '최종 확정 완료' : '검토 후 최종 확정'}</Button></>}
             <Button className="audit-button" variant="ghost" disabled={busy} onClick={exportAudit}><Download size={16}/>운영·추첨 기록 저장</Button>
           </section>
           <section className="panel review-panel"><h2>선생님 확인 사항</h2><button className="review-item" onClick={() => { setFilter(result ? 'waiting' : 'unsubmitted'); document.getElementById('teacher-roster')?.scrollIntoView({ behavior: 'smooth' }); }}><span>{result ? '미배정 학생' : '미신청 학생'}</span><b>{result ? waiting : students.length - submitted}명 <ArrowRight size={14}/></b></button><button className="review-item" onClick={() => { setFilter('unverified'); document.getElementById('teacher-roster')?.scrollIntoView({ behavior: 'smooth' }); }}><span>제출 후 미확인</span><b>{submitted - verifiedCount}명 <ArrowRight size={14}/></b></button>{result && <><div className="review-item"><span>최소 인원 미달</span><b>{shortage.length}개</b></div>{shortage.length > 0 && <p className="shortage-list">{shortage.map(club => `${club.name} ${club.count}/${club.min}명`).join(' · ')}</p>}</>}<p>학생이 지망을 다시 제출하면 이전 확인은 초기화돼요. 새로고침으로 최신 현황을 확인해 주세요.</p><p>개인 코드는 각 학생에게 개별 전달하고, 분실한 경우 해당 학생 행에서 재발급해요.</p></section>
@@ -308,8 +313,8 @@ export function TeacherDashboard({ initialState }: { initialState: PortalState }
     </main>
     <footer className="footer"><span>안성초 5·6학년 동아리 신청</span><span>명단 등록 → 학생 신청 → 배정·검토 → 최종 확정</span><span>선생님 관리</span></footer>
 
-    <AlertDialog open={!!confirmation} onOpenChange={open => { if (!open) setConfirmation(null); }}><AlertDialogContent><AlertDialogTitle>{confirmationTitle}</AlertDialogTitle><AlertDialogDescription>{confirmationDescription}</AlertDialogDescription><AlertDialogFooter><AlertDialogCancel>취소</AlertDialogCancel><AlertDialogAction disabled={busy} onClick={confirmAction}>{confirmation === 'close' ? '신청 마감' : confirmation === 'allocate' ? '자동 배정 실행' : confirmation === 'finalize' ? '최종 확정' : '새 코드 발급'}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
-    <ClubSettings open={settings} onOpenChange={setSettings} draft={draft} onChange={setDraft} students={students} error={settingsError} onSave={async () => { if (await perform({ action: 'settings', clubs: draft }, '동아리 정원과 고정 명단을 저장했어요.')) setSettings(false); }}/>
+    <AlertDialog open={!!confirmation} onOpenChange={open => { if (!open) setConfirmation(null); }}><AlertDialogContent><AlertDialogTitle>{confirmationTitle}</AlertDialogTitle><AlertDialogDescription>{confirmationDescription}</AlertDialogDescription><AlertDialogFooter><AlertDialogCancel>취소</AlertDialogCancel><AlertDialogAction disabled={busy} onClick={confirmAction}>{confirmation === 'close' ? '신청 마감' : confirmation === 'allocate' ? `${nextRank}지망 배정 실행` : confirmation === 'finalize' ? '최종 확정' : '새 코드 발급'}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+    <ClubSettings key={settingsRevision} fixedOnly={fixedOnly} originalClubs={clubs} result={result} busy={busy} open={settings} onOpenChange={setSettings} draft={draft} onChange={setDraft} students={students} error={settingsError} onSave={async () => { if (await perform({ action: 'settings', clubs: draft }, fixedOnly ? '고정 명단과 해당 학생 배정을 반영했어요.' : '동아리 정원과 고정 명단을 저장했어요.', settingsRevision)) setSettings(false); }}/>
     <ClubDetail key={`${detail}-${!!result}`} club={clubs.find(club => club.id === detail)} clubs={clubs} students={students} result={result} open={!!detail} onOpenChange={open => { if (!open) setDetail(null); }}/>
     <Dialog open={!!editing} onOpenChange={open => { if (!open) setEditing(null); }}><DialogContent><DialogTitle>학생 배정 조정</DialogTitle><DialogDescription>{editing?.id} · {editing?.name}<br/>현재: {clubName(result?.placements[editing?.id ?? '']?.club)}</DialogDescription><label className="field-label">이동할 동아리<select className="picker" value={destination} onChange={event => setDestination(event.target.value)} disabled={busy}><option value="">동아리를 선택해 주세요</option>{stats.map(club => <option key={club.id} value={club.id} disabled={club.count >= club.max || result?.placements[editing?.id ?? '']?.club === club.id}>{club.name} ({club.count}/{club.max}명)</option>)}</select></label><label className="field-label">조정 사유<textarea value={reason} onChange={event => setReason(event.target.value)} maxLength={300} placeholder="학생과 확인한 재선택 내용 또는 조정 사유" disabled={busy}/></label>{editError && <p className="form-error" role="alert">{editError}</p>}<Button className="primary" disabled={busy || !destination || !reason.trim()} onClick={async () => { if (editing && await perform({ action: 'adjust', studentId: editing.id, destination, reason: reason.trim() }, '학생 배정을 조정했어요.')) setEditing(null); }}>배정 변경</Button></DialogContent></Dialog>
     <Dialog open={codes.length > 0} onOpenChange={open => { if (!open) setCodes([]); }}><DialogContent className="wide-dialog portal-code-dialog" showCloseButton={false}><DialogTitle>학생 개인 코드 {codes.length}개 발급</DialogTitle><DialogDescription>개인 코드는 이 화면에서 한 번만 표시돼요. 닫기 전에 저장하고 각 학생에게 자신의 코드만 개별 전달해 주세요. 전체 코드 명단을 학생들에게 공유하지 마세요.</DialogDescription><div className="portal-code-table max-h-[45dvh] overflow-y-auto"><Table><TableHeader><TableRow><TableHead>학번</TableHead><TableHead>이름</TableHead><TableHead>개인 코드</TableHead></TableRow></TableHeader><TableBody>{codes.map(code => <TableRow key={code.id}><TableCell>{code.id}</TableCell><TableCell>{code.name}</TableCell><TableCell><code>{code.code}</code></TableCell></TableRow>)}</TableBody></Table></div><Button className="primary" onClick={() => saveFile('학생_개인코드_개별전달용.csv', csv([['학번', '이름', '개인 코드'], ...codes.map(code => [code.id, code.name, code.code])]))}><Download size={16}/>개인 코드 명단 저장</Button><Button variant="outline" onClick={() => setCodes([])}>확인했어요 · 코드 화면 닫기</Button><p className="muted">나중에는 기존 코드를 조회할 수 없어요. 분실한 학생은 새 코드를 발급해 주세요.</p></DialogContent></Dialog>
